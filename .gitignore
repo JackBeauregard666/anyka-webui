@@ -6,6 +6,18 @@ verify/
 *.log
 *.bak*
 
+# Firmware / MTD images & binary dumps
+*.bin
+*.img
+
+# Camera configuration & secrets
+anyka_conf.ini
+wpa_supplicant.conf
+ntp.conf
+lan_routes.conf
+.env
+prompt*.txt
+
 # Upstream firmware clones & build artifacts
 src/Anyka-Camera-Firmware/
 build/
@@ -18,4 +30,3 @@ __pycache__/
 # Temporary / OS files
 .DS_Store
 Thumbs.db
-prompt.txt
