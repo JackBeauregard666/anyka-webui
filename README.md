@@ -1,276 +1,157 @@
-# Anyka Domecam WebUI
+# anyka-webui
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Platform: Anyka AK3918](https://img.shields.io/badge/Platform-Anyka%20AK3918EN080-orange.svg)](https://github.com)
-[![Streaming: RTSP H.264](https://img.shields.io/badge/Streaming-RTSP%20Port%20554-green.svg)](https://github.com)
-[![Network: LAN--Only](https://img.shields.io/badge/Security-LAN--Isolated-brightgreen.svg)](https://github.com)
+[![CI](https://github.com/JackBeauregard666/anyka-webui/actions/workflows/ci.yml/badge.svg)](https://github.com/JackBeauregard666/anyka-webui/actions/workflows/ci.yml)
 
-A lightweight, robust, and secure WebUI with **purely relative PTZ control** and native **RTSP streaming** for Anyka-based dome IP cameras (AK3918EN080 / V380 / generic PTZ cameras).
+WebUI und Steuerung fuer Anyka AK3918 IP-Dome-Kameras mit relativer PTZ-Ausrichtung, nativer RTSP-Bereitstellung und lokaler Netzwerk-Isolation.
 
----
-
-## 🎯 Problems Solved
-
-Stock firmware and existing web overlays for Anyka dome cameras suffer from several critical shortcomings:
-1. **Broken Absolute Positioning:** The internal stepper motors (28BYJ-48) lack hardware feedback/hall pins. Mechanical collisions or cold boots leave the software coordinate system completely unreferenced, leading to gear grinding and unpredictable jumps.
-2. **Resource-Exhausting Snapshot Loops:** Repeatedly polling `snap.jpg` via HTTP creates high CPU load and memory leaks on the constrained 64 MB RAM SoC (often leaving only 10–14 MB free), frequently crashing the camera.
-3. **Cloud Leaks & Telemetry:** Factory daemons attempt to phone home to cloud services or establish P2P tunnels over the internet.
-4. **Race Conditions & Queue Grinding:** Rapidly clicking directional buttons floods the motor FIFO, locking up the camera while motors grind against stops.
-
-**This project completely eliminates these issues.**
+A lightweight web interface and control suite for Anyka AK3918 dome IP cameras.
+It provides relative PTZ movement via browser, native RTSP streaming links, and network routing isolation without cloud dependencies.
 
 ---
 
-## ✨ Key Features
+## 1. Was das Projekt tut und was nicht
 
-- **Purely Relative PTZ Dial:** 
-  - Visual circular dial (12 o'clock = "current view").
-  - Drag or tap to turn by any relative angle from $-180^\circ$ to $+180^\circ$ (left/right) and $-60^\circ$ to $+60^\circ$ (up/down).
-  - Quick-action preset buttons ($15^\circ, 45^\circ, 90^\circ, 180^\circ$).
-  - Full touch and mouse support with `touch-action: none` and `pointercancel` protection.
-- **Native RTSP Integration:**
-  - Zero snapshot polling! All video is handled via hardware-accelerated RTSP (Port 554) @ 25 FPS.
-  - Dual stream URLs for Main (`/vs0` 1080p) and Sub (`/vs1` 480p).
-  - Instant one-click copy and auto-generated VLC `.m3u` playlist download.
-- **Strict LAN-Only Isolation:**
-  - Custom DHCP hook (`udhcpc_lanonly.sh`) automatically strips default gateways and blanks DNS servers.
-  - Zero cloud leakage: the camera stays strictly confined to the local network.
-- **Atomic Busy Locking:**
-  - Atomic `mkdir`-based locks enforce physical transit times based on measured motor speed ($25^\circ/\text{s}$).
-  - All overlapping movement requests are rejected cleanly with `{"ok":false,"err":"busy"}` instead of queueing up.
-- **Hardware Soft-Limits & Octal-Safe Normalization:**
-  - Clamping to safe physical limits ($15^\circ..335^\circ$ Pan, $15^\circ..110^\circ$ Tilt).
-  - Normalization of leading zeros (e.g. `dpan=-015` $\rightarrow$ `-15`) prevents BusyBox `ash` octal parsing traps.
-- **Ultra-Lightweight Footprint:**
-  - Written in pure POSIX `/bin/sh` and standard HTML5/CSS/JavaScript without frameworks.
-  - Consumes $< 500\,\text{KB}$ RAM in tmpfs; executes in $< 30\,\text{ms}$.
+### Das Projekt bietet:
+- **Relative PTZ-Steuerung:** Bedienung ueber einen visuellen Kreis in der Weboberflaeche und per HTTP-POST-API. Drehungen erfolgen relativ zur aktuellen Ausrichtung ("um X Grad nach links/rechts/oben/unten").
+- **RTSP-Streaming-Adressen:** Anzeige der RTSP-URLs fuer Haupt- und Substream zur Einbindung in externe Player (z. B. VLC) oder Smart-Home-Systeme (z. B. Home Assistant), inklusive M3U-Download.
+- **LAN-Isolation:** Automatisches Entfernen des Standard-Gateways und Leeren der DNS-Konfiguration nach dem Systemstart, um ausgehende WAN- und Cloud-Verbindungen auf Netzwerkebene zu unterbinden.
+- **Systemstatus:** Abfrage von Uptime, freiem Arbeitsspeicher, WLAN-Signalstaerke und Prozesszustaenden.
+
+### Das Projekt bietet bewusst nicht:
+- **Kein Livebild im Webbrowser:** Das Abgreifen von Einzelbildern (`snap.jpg`) ueber HTTP fuehrte zu Instabilitaeten und Speicherengpaessen und wurde vollstaendig entfernt. Die Videoanzeige erfolgt ausschliesslich ueber externe RTSP-Clients.
+- **Keine absolute Positionierung:** Die Schrittmotoren der Kamera besitzen keine Rueckmeldekontakte. Nach einem Neustart ist die physische Blickrichtung zufaellig. Es gibt keine Kalibrierung auf absolute Raumkoordinaten.
+- **Kein erweiterter Drehbereich:** Der Bewegungsbereich ist durch Software-Grenzen und mechanische Anschlaege begrenzt und bezieht sich stets relativ auf den Zustand nach dem Einschalten.
 
 ---
 
-## 🏛️ Architecture & How It Works
+## 2. Funktionen
 
-```mermaid
-flowchart TD
-    subgraph Browser ["Web Browser (PC & Smartphone)"]
-        UI["WebUI (index.html)\n- Relative Dial (12 Uhr = Jetzt)\n- RTSP URL Display & M3U Export\n- Status Polling"]
-    end
-
-    subgraph Camera ["Anyka Camera (AK3918EN080)"]
-        HTTPD["BusyBox httpd (Port 80)\nServing /tmp/www"]
-        CGI["api.cgi (/bin/sh)\n- Input Validation & Normalization\n- Soft-Limit Clamping (15-335° / 15-110°)\n- Atomic Lock (/tmp/ptz_lock)\n- Busy Calculation (25°/s)"]
-        FIFO["/tmp/ptz.daemon (FIFO)"]
-        PTZ_D["ptz_daemon\nC++ Controller"]
-        MOTORS["Drivers /dev/ak-motor0, ak-motor1\n28BYJ-48 Steppers"]
-        
-        RTSP["rtsp Daemon (Port 554)\n/vs0 (HD) & /vs1 (Sub)"]
-        SUP["rtsp_supervisor.sh\nHealth Watchdog"]
-        
-        DHCP["udhcpc_lanonly.sh\nDrops Gateway & DNS"]
-    end
-
-    subgraph Client ["Video Clients (VLC, Home Assistant)"]
-        RTSP_CLIENT["RTSP Video Stream (25 FPS)"]
-    end
-
-    UI -->|POST action=turn| HTTPD
-    HTTPD --> CGI
-    CGI -->|t2p <pan> <tilt>| FIFO
-    FIFO --> PTZ_D
-    PTZ_D --> MOTORS
-    
-    RTSP --> RTSP_CLIENT
-    SUP -->|Monitors| RTSP
-    DHCP -->|LAN-Only| Camera
-```
-
-### The Relative PTZ Mechanics
-1. On boot, `ptz_daemon` initializes `cur_pos = 0` regardless of the camera's actual physical orientation.
-2. In this architecture, coordinates in `ptz.ini` serve only as internal software offsets bounded by soft-limits ($15^\circ..335^\circ$ Pan, $15^\circ..110^\circ$ Tilt).
-3. When the user requests a turn of $\Delta\text{pan} = +45^\circ$, `api.cgi`:
-   - Reads current software position `CUR_PAN`.
-   - Adds $\Delta\text{pan}$ and clamps to $[15, 335]$.
-   - Calculates duration: $T_{\text{busy}} = 1000\,\text{ms} + \frac{|\Delta\text{pan}| \times 1000}{25}$.
-   - Sets an atomic lock in `/tmp/ptz_busy_until`.
-   - Sends `t2p <final_pan> <final_tilt>` to `/tmp/ptz.daemon`.
-   - Returns JSON with `requested`, `executed`, `clamped`, and `busy_ms`.
-4. The WebUI locks all controls for $T_{\text{busy}}$ seconds, displays countdown feedback, and resets the visual dial back to $0^\circ$ ("Now").
+- Relativer Drehkreis (12 Uhr entspricht der aktuellen Ausrichtung) mit Touch- und Mausbedienung.
+- Schnelltasten fuer Pan (15, 45, 90, 180 Grad links/rechts) und Tilt (15, 30 Grad hoch/runter).
+- Feinjustierung ueber Einzelschritt-Tasten (jeweils 10 Einheiten).
+- Opt-in Tastatursteuerung ueber Pfeiltasten (standardmaessig deaktiviert).
+- Atomare Bewegungssperre waehrend laufender Motorfahrten (Abweisung paralleler Befehle mit Restzeitanzeige).
+- Erkennung und Anzeige von Begrenzungen (Soft-Limits) bei Ueberschreitung des zulaessigen Fahrbereichs.
+- Schalten der weissen LED ueber die Weboberflaeche und per API.
+- HTTP-API mit Pflicht zur POST-Methode, Referer-Pruefung und Content-Type-Pruefung gegen unberechtigte Aufrufe.
 
 ---
 
-## 📁 Repository Structure
+## 3. Getestete Hardware und Umgebung
 
-```text
-├── webui/
-│   └── www/
-│       ├── index.html              # Responsive WebUI (HTML5/CSS3/Vanilla JS)
-│       └── cgi-bin/
-│           └── api.cgi             # Hardened POSIX CGI handler
-├── start_webui.sh                  # SD card master boot script
-├── rtsp_supervisor.sh              # RTSP daemon watchdog & health restarter
-├── bin/
-│   └── udhcpc_lanonly.sh           # LAN-isolation DHCP hook
-├── tools/
-│   └── cam_ctl.py                  # Standalone Python CLI for camera control & file sync
-├── anyka_architecture_spec.md      # Detailed hardware & engineering specification
-├── LICENSE                         # MIT License
-└── README.md
-```
+Die Tests und Messungen wurden auf folgendem Geraet durchgefuehrt:
+
+| Parameter | Gemessener Wert / Identifikation |
+| :--- | :--- |
+| **Kamera-Modell** | Generic Anyka Dome IP Camera (V380-kompatibel) |
+| **SoC** | Anyka AK3918EN080 V200 (ARM926EJ-S @ 400 MHz, Soft-Float) |
+| **Sensor-Treiber** | `sensor_gc1054.ko` (GalaxyCore GC1054), `akcamera.ko` |
+| **WLAN-Treiber** | `rtl8188fu.ko` (Realtek RTL8188FU USB) |
+| **Kernel / C-Library**| Linux 3.4.35 / uClibc 0.9.33.2 |
+| **Upstream-Basis** | [MuhammedKalkan/Anyka-Camera-Firmware](https://github.com/MuhammedKalkan/Anyka-Camera-Firmware), Commit `823cb55` |
+| **Testdatum** | 26. Oktober 2026 |
+
+*Andere Hardware-Revisionen, Sensoren oder WLAN-Chipsaetze sind ungetestet.*
 
 ---
 
-## 🚀 Installation & Setup
+## 4. Messwerte
 
-### Prerequisites
-1. An Anyka AK3918-based dome camera (AK3918EN080 or compatible).
-2. MicroSD card (FAT32 formatted) with the Anyka SD card exploit/bootloader enabled.
-3. Python 3 on your workstation (for `cam_ctl.py`).
+Die folgenden Werte wurden am 26. Oktober 2026 auf dem Testsystem erhoben:
 
-### Step 1: Copy Files to MicroSD Card
-Place the files into `/mnt/anyka_webui/` on your MicroSD card:
-```text
-/mnt/anyka_webui/
-├── start_webui.sh
-├── rtsp_supervisor.sh
-├── bin/
-│   └── udhcpc_lanonly.sh
-└── www/
-    ├── index.html
-    └── cgi-bin/
-        └── api.cgi
-```
+### Video-Streams (gemessen per ffprobe ueber RTSP Port 554)
+- **Hauptstream (`/vs0`):** Auflosung 1280x720 Pixel (720p), 25,0 FPS, Codec H.264.
+- **Substream (`/vs1`):** Auflosung 640x480 Pixel (VGA), 25,0 FPS, Codec H.264.
 
-Make sure script permissions are executable:
-```bash
-chmod 755 start_webui.sh rtsp_supervisor.sh bin/udhcpc_lanonly.sh www/cgi-bin/api.cgi
-chmod 644 www/index.html
-```
+### Arbeitsspeicher (gemessen per status-API / /proc/meminfo)
+- **Verfuegbarer RAM:** 23,1 MB bis 24,5 MB (aus MemFree + Buffers + Cached - Shmem, von 64 MB physischem RAM abzg. ISP-Reservierung).
 
-### Step 2: Over-The-Air Deployment via `cam_ctl.py`
-If your camera is already running on the local network (default Telnet port 23):
-```bash
-# Upload WebUI and CGI backend
-./tools/cam_ctl.py --host <CAMERA_IP> put webui/www/cgi-bin/api.cgi /mnt/anyka_webui/www/cgi-bin/api.cgi
-./tools/cam_ctl.py --host <CAMERA_IP> put webui/www/index.html /mnt/anyka_webui/www/index.html
+### API-Antwortzeiten (20 aufeinanderfolgende Abfragen ueber WLAN)
+- `GET /cgi-bin/api.cgi?action=status`:
+  - Minimum: 200,2 ms
+  - Median: 232,2 ms
+  - Durchschnitt: 257,0 ms
+  - 95. Perzentil (p95): 425,8 ms
+- `POST /cgi-bin/api.cgi?action=turn&dpan=10&dry=1`:
+  - Minimum: 82,8 ms
+  - Median: 101,2 ms
+  - Durchschnitt: 106,3 ms
+  - 95. Perzentil (p95): 149,3 ms
 
-# Set permissions and mirror to live web root
-./tools/cam_ctl.py --host <CAMERA_IP> exec "chmod 755 /mnt/anyka_webui/www/cgi-bin/api.cgi && chmod 644 /mnt/anyka_webui/www/index.html && cp -f /mnt/anyka_webui/www/index.html /tmp/www/index.html && cp -f /mnt/anyka_webui/www/cgi-bin/api.cgi /tmp/www/cgi-bin/api.cgi"
-```
+### Systemstart (gemessen an /mnt/anyka_webui/boot.log)
+- `0 s`: Kernel-Initialisierung
+- `7 s`: Start von `start_webui.sh`, Web-Verzeichnis nach `/tmp/www` gespiegelt
+- `35 s`: WLAN-Verbindung steht (IP-Zuweisung abgeschlossen)
+- `35 s`: Default-Gateway geloescht, DNS geleert, LAN-only aktiv
+- `35 s`: `ptz_daemon` und `httpd` gestartet
+- `37 s`: `rtsp_supervisor.sh` beendet `anyka_ipc` und startet RTSP-Daemon
 
-### Step 3: Access the WebUI
-Open your browser and navigate to:
-```text
-http://<CAMERA_IP>/
-```
+### Drehgeschwindigkeit der Motoren
+- **Pan / Tilt:** ca. 25 Grad pro Sekunde (1 Rohwert entspricht ca. 1,0 Grad physikalischer Drehung).
 
 ---
 
-## 📡 API Reference
+## 5. Voraussetzungen und Schnellstart
 
-All mutating actions require `POST` and pass parameters in the URL query string or body.
+Ausfuehrliche Schritte, Pruefsummen und Vorlagen sind in [docs/INSTALLATION.md](docs/INSTALLATION.md) dokumentiert.
 
-### 1. System Status
-`GET /cgi-bin/api.cgi?action=status`
-
-**Response:**
-```json
-{
-  "ok": true,
-  "uptime_s": 3413,
-  "avail_kb": 24672,
-  "lan_isolated": true,
-  "wifi_link": "83",
-  "wifi_dbm": "54",
-  "ptz_ready": 1,
-  "rtsp_ready": 1,
-  "busy": false,
-  "busy_remaining_s": 0,
-  "ptz_valid": true,
-  "debug_pan": 270,
-  "debug_tilt": 25
-}
-```
-
-### 2. Relative Turn (`turn`)
-`POST /cgi-bin/api.cgi?action=turn&dpan=<int>&dtilt=<int>[&dry=1]`
-
-| Parameter | Type | Range | Description |
-| :--- | :--- | :--- | :--- |
-| `dpan` | Integer | $-180 \dots +180$ | Relative Pan delta ($>0$: right, $<0$: left). Max 4 chars. |
-| `dtilt` | Integer | $-60 \dots +60$ | Relative Tilt delta ($>0$: down, $<0$: up). Max 4 chars. |
-| `dry` | Integer | `0` or `1` | Optional dry-run flag. Calculates without moving motors. |
-
-**Success Response:**
-```json
-{
-  "ok": true,
-  "requested": { "dpan": 45, "dtilt": -15 },
-  "executed": { "dpan": 45, "dtilt": -15 },
-  "clamped": false,
-  "busy_ms": 2800
-}
-```
-
-**Clamped Response (Hit Soft-Limit):**
-```json
-{
-  "ok": true,
-  "requested": { "dpan": 90, "dtilt": 0 },
-  "executed": { "dpan": 65, "dtilt": 0 },
-  "clamped": true,
-  "busy_ms": 3600
-}
-```
-
-**Busy Rejection:**
-```json
-{
-  "ok": false,
-  "err": "busy",
-  "busy_remaining_s": 3
-}
-```
-
-### 3. LED Control
-- Turn on: `POST /cgi-bin/api.cgi?action=light_on`
-- Turn off: `POST /cgi-bin/api.cgi?action=light_off`
-
-### 4. Direct Micro-Stepping
-- Step Up: `POST /cgi-bin/api.cgi?action=up[&step=1..5]`
-- Step Down: `POST /cgi-bin/api.cgi?action=down[&step=1..5]`
-- Step Left: `POST /cgi-bin/api.cgi?action=left[&step=1..5]`
-- Step Right: `POST /cgi-bin/api.cgi?action=right[&step=1..5]`
-- Stop: `POST /cgi-bin/api.cgi?action=stop`
+1. MicroSD-Karte mit FAT32 formatieren.
+2. Das Verzeichnis `anyka_webui` auf die SD-Karte kopieren.
+3. Die Binaries `busybox`, `ptz_daemon`, `rtsp` und `lib/` in den Ordner `custom/` auf der SD-Karte ablegen.
+4. Den Boot-Hook in `/etc/jffs2/time_zone.sh` auf der Kamera ergaenzen (siehe Installationsanleitung).
+5. Kamera mit gesteckter SD-Karte neu starten und Weboberflaeche unter `http://<KAMERA_IP>/` aufrufen.
 
 ---
 
-## 🛠️ Management CLI (`tools/cam_ctl.py`)
+## 6. Sicherheit und Netzwerk
 
-The repository includes a dependency-free Python tool for interacting with the camera via Telnet and FTP:
+Die Netzwerk-Isolation basiert auf technischem Routing und stellt keine absolute Sicherheitsgarantie dar:
 
-```bash
-# Execute command on camera
-./tools/cam_ctl.py --host <CAMERA_IP> exec "uptime"
+1. **Zeitfenster beim Systemstart:** Waehrend der ersten ca. 35 Sekunden nach dem Einschalten laeuft der Werks-Daemon `anyka_ipc` mit aktiver Internetverbindung und gueltigem Standard-Gateway, um die WLAN-Verbindung herzustellen. Erst nach Zuweisung der IP-Adresse entfernt `start_webui.sh` die Standard-Route.
+2. **Fehlende Authentifizierung:** Die auf der Kamera laufenden Dienste (Telnet mit Root-Shell, FTP, RTSP und der Webserver) besitzen standardmaessig keinen Kennwortschutz.
+3. **Keine Portweiterleitung:** Die Kamera darf unter keinen Umstaenden per Port-Forwarding aus dem Internet erreichbar gemacht werden. Sie gehoert in ein dediziertes, isoliertes Netzwerksegment (z. B. IoT-VLAN).
+4. **Empfohlene Routersperre:** Es wird dringend empfohlen, dem Geraet im heimischen Router (z. B. AVM FRITZ!Box ueber das Zugangsprofil "Gesperrt") saemtliche Internetverbindungen zusaetzlich auf Infrastrukturebene zu sperren.
+5. **IPv6:** Auf dem getesteten Kernel 3.4.35 ist kein IPv6-Stack aktiv (`/proc/net/if_inet6` existiert nicht). Es koennen keine IPv6-Verbindungen aufgebaut werden.
+6. **Notbremse:** Befindet sich auf der SD-Karte die Datei `DISABLE_WEBUI` oder fehlt die Karte beim Booten, startet die Kamera im regulaeren Werkszustand mit voller Cloud-Anbindung.
 
-# Upload file via FTP
-./tools/cam_ctl.py --host <CAMERA_IP> put local_file.sh /mnt/anyka_webui/remote_file.sh
-
-# Download file
-./tools/cam_ctl.py --host <CAMERA_IP> get /mnt/anyka_webui/boot.log ./boot.log
-```
+Weitere Hinweise sind in [SECURITY.md](SECURITY.md) hinterlegt.
 
 ---
 
-## 🔒 Security & LAN Isolation
+## 7. Rollback und Notbremse
 
-To ensure that the camera does not send private video feeds to overseas cloud servers:
-1. `bin/udhcpc_lanonly.sh` intercepts DHCP leases.
-2. It sets the local IP and netmask on `wlan0`.
-3. It explicitly deletes the default gateway (`route del default`).
-4. It sets `/etc/resolv.conf` to empty (`# LAN-only, no DNS`).
-5. As a result, the camera can only be reached from within your local subnet or VPN; WAN connections are physically unroutable.
+- **Temporaere Deaktivierung:** Datei `DISABLE_WEBUI` im Wurzelverzeichnis der SD-Karte anlegen und Kamera neu starten.
+- **Rueckkehr zum Werkszustand:** SD-Karte entnehmen oder den Aufruf von `start_webui.sh` aus `/etc/jffs2/time_zone.sh` entfernen.
+- Detaillierte Schritte zur vollstaendigen Deinstallation siehe [docs/INSTALLATION.md](docs/INSTALLATION.md).
 
 ---
 
-## 📄 License
+## 8. Fehlersuche
 
-This project is open-source software licensed under the [MIT License](LICENSE).
+- **WebUI reagiert nicht:** Pruefen, ob die Kamera anpingbar ist. Inhalt von `/mnt/anyka_webui/boot.log` pruefen.
+- **RTSP-Stream nicht erreichbar:** Inhalt von `/mnt/anyka_webui/rtsp_supervisor.log` und `/tmp/rtsp.log` pruefen. Pruefen, ob Port 554 lauscht (`netstat -l` oder `/proc/net/tcp`).
+- **Kamera dreht sich nicht:** Status abfragen (`curl -s http://<KAMERA_IP>/cgi-bin/api.cgi?action=status`). Feld `ptz_ready` muss den Wert `1` haben. Pruefen, ob `/tmp/ptz.daemon` als FIFO existiert.
+
+---
+
+## 9. Entwicklung und Tests
+
+- **Steuerungs-CLI:** `tools/cam_ctl.py` ermoeglicht Befehlsausfuehrung und Dateiuebertragung per Telnet/FTP ohne externe Abhaengigkeiten.
+- **SD-Build:** `tools/build_sd.sh` erstellt ein sauberes SD-Kartenverzeichnis mit LF-Zeilenenden und SHA-256-Pruefsummen.
+- **Lokale API-Tests:** `tests/test_api.sh` fuehrt 12 automatisierte Tests gegen `api.cgi` auf dem Entwicklungsrechner aus (POST-Pflicht, Validierung, Grenzwerte, Referer, Content-Type, Expect-Logik).
+- **CI:** GitHub Actions prueft Syntax (`dash -n`), ShellCheck, JavaScript (`node --check`), Python (`py_compile`) und fuehrt die API-Tests aus.
+
+---
+
+## 10. Lizenzen und Danksagung
+
+### Danksagung an Upstream-Projekte
+- **[MuhammedKalkan/Anyka-Camera-Firmware](https://github.com/MuhammedKalkan/Anyka-Camera-Firmware):** Basis fuer SD-Karten-Methode, `rtsp`-Daemon, `ptz_daemon` und Treiber-Bibliotheken (lizenziert unter der MIT-Lizenz).
+- **[ricardojlrufino/anyka_v380ipcam_experiments](https://github.com/ricardojlrufino/anyka_v380ipcam_experiments):** Analyse und Skripte fuer Anyka V380 / AK3918 Kameras (lizenziert unter der MIT-Lizenz).
+- **[Gerge / VGerris: Anyka_ak3918_hacking_journey](https://github.com/VGerris/Anyka_ak3918_hacking_journey):** Dokumentation der Hardware-Register und Speicherstrukturen (lizenziert unter der GNU General Public License v3.0).
+
+### Eigene Lizenz
+Der Code dieses Projekts ist unter der [MIT-Lizenz](LICENSE) veroeffentlicht.
+
+### Haftungsausschluss
+Die Modifikation von IP-Kameras erfolgt ausschliesslich auf eigene Gefahr. Das Ausfuehren von Drittanbieter-Skripten und Eingriffen in die Boot-Dateien kann zum Verlust von Herstellergarantien oder zur Beschaedigung des Geraets fuehren.
