@@ -1,25 +1,35 @@
 #!/bin/sh
-# /tmp/udhcpc_lanonly.sh -- Haelt das DHCP-Lease im LAN frisch,
-# ignoriert aber Router/Gateway & DNS. Pflicht-Verifikation: Spec Abschnitt 6.
+# /tmp/udhcpc_lanonly.sh -- DHCP-Lease-Erneuerung ohne Gateway und DNS
 [ -z "$1" ] && exit 1
 
 CONF="/tmp/udhcpc_lanonly.conf"
 
+write_if_diff() {
+    _file="$1"
+    _content="$2"
+    if [ -w "$_file" ] || [ -L "$_file" ]; then
+        _cur=$(cat "$_file" 2>/dev/null || true)
+        if [ "$_cur" != "$_content" ]; then
+            printf '%s\n' "$_content" > "$_file" 2>/dev/null || true
+        fi
+    fi
+}
+
 case "$1" in
-    deconfig)
-        # WICHTIG: Niemals 0.0.0.0 setzen, solange wlan0 aktiv ist (Telnet reisst sonst ab)!
+    deconfig|leasefail|nak)
+        # Bewusst No-Op: IP wird nicht genullt (verhindert Verbindungsabbrueche bei Lease-Renewal)
         ;;
     renew|bound)
         ifconfig "$interface" "$ip" ${subnet:+netmask "$subnet"} ${broadcast:+broadcast "$broadcast"}
 
-        # JEDES Default-Gateway entfernen (begrenzt, kein Endlosloop):
+        # Alle Default-Gateways entfernen
         n=0
         while [ "$n" -lt 10 ]; do
             route del default 2>/dev/null || break
             n=$((n + 1))
         done
 
-        # Optional: gezielte Routen zu Client-Subnetzen
+        # Optionale statische Client-Routen
         if [ -r "$CONF" ] && [ -n "$router" ]; then
             CLIENT_ROUTES=""
             . "$CONF"
@@ -30,13 +40,9 @@ case "$1" in
             done
         fi
 
-        # DNS leeren
-        if [ -L /etc/resolv.conf ] || [ -w /etc/resolv.conf ]; then
-            { printf '# LAN-ONLY MODE\n' > /etc/resolv.conf; } 2>/dev/null
-        fi
-        if [ -w /etc/jffs2/resolv.conf ]; then
-            { printf '# LAN-ONLY MODE\n' > /etc/jffs2/resolv.conf; } 2>/dev/null
-        fi
+        # DNS nur schreiben wenn abweichend (schont Flash /etc/jffs2)
+        write_if_diff "/etc/resolv.conf" "# LAN-ONLY MODE"
+        write_if_diff "/etc/jffs2/resolv.conf" "# LAN-ONLY MODE"
         ;;
 esac
 exit 0
