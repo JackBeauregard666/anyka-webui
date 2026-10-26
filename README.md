@@ -20,7 +20,8 @@ It provides relative PTZ movement via browser, native RTSP streaming links, and 
 ### Das Projekt bietet bewusst nicht:
 - **Kein Livebild im Webbrowser:** Das Abgreifen von Einzelbildern (`snap.jpg`) ueber HTTP fuehrte zu Instabilitaeten und Speicherengpaessen und wurde vollstaendig entfernt. Die Videoanzeige erfolgt ausschliesslich ueber externe RTSP-Clients.
 - **Keine absolute Positionierung:** Die Schrittmotoren der Kamera besitzen keine Rueckmeldekontakte. Nach einem Neustart ist die physische Blickrichtung zufaellig. Es gibt keine Kalibrierung auf absolute Raumkoordinaten.
-- **Kein erweiterter Drehbereich:** Der Bewegungsbereich ist durch Software-Grenzen und mechanische Anschlaege begrenzt und bezieht sich stets relativ auf den Zustand nach dem Einschalten.
+- **Kein erweiterter Drehbereich:** Der Bewegungsbereich ist durch Software-Grenzen und mechanische Anschlaege begrenzt. Die Software-Grenzen beziehen sich auf die in `ptz.ini` gespeicherten Zaehlerwerte; nach einem Neustart stimmen diese nicht sicher mit der tatsaechlichen Blickrichtung ueberein. Sie sind deshalb ein Richtwert, kein exakter Anschlagschutz.
+- **Keine Home- oder Referenzfahrt:** Eine Fahrt zu einer "gespeicherten Position" gibt es nicht, weil die Blickrichtung nach dem Start nicht reproduzierbar ist.
 
 ---
 
@@ -43,7 +44,7 @@ Die Tests und Messungen wurden auf folgendem Geraet durchgefuehrt:
 
 | Parameter | Gemessener Wert / Identifikation |
 | :--- | :--- |
-| **Kamera-Modell** | Generic Anyka Dome IP Camera (V380-kompatibel) |
+| **Kamera-Modell** | Anyka-Dome-IP-Kamera mit PTZ (Hersteller und Modellbezeichnung unbekannt) |
 | **SoC** | Anyka AK3918EN080 V200 (ARM926EJ-S @ 400 MHz, Soft-Float) |
 | **Sensor-Treiber** | `sensor_gc1054.ko` (GalaxyCore GC1054), `akcamera.ko` |
 | **WLAN-Treiber** | `rtl8188fu.ko` (Realtek RTL8188FU USB) |
@@ -107,12 +108,13 @@ Ausfuehrliche Schritte, Pruefsummen und Vorlagen sind in [docs/INSTALLATION.md](
 
 Die Netzwerk-Isolation basiert auf technischem Routing und stellt keine absolute Sicherheitsgarantie dar:
 
-1. **Zeitfenster beim Systemstart:** Waehrend der ersten ca. 35 Sekunden nach dem Einschalten laeuft der Werks-Daemon `anyka_ipc` mit aktiver Internetverbindung und gueltigem Standard-Gateway, um die WLAN-Verbindung herzustellen. Erst nach Zuweisung der IP-Adresse entfernt `start_webui.sh` die Standard-Route.
+1. **Zeitfenster beim Systemstart:** Waehrend der ersten ca. 35 Sekunden nach dem Einschalten laeuft der Werks-Daemon `anyka_ipc` mit aktiver Internetverbindung und gueltigem Standard-Gateway, um die WLAN-Verbindung herzustellen. Erst nach Zuweisung der IP-Adresse entfernt `start_webui.sh` die Standard-Route. Optional kann dieses Fenster verkleinert werden: Mit einer Datei `EARLY_ISOLATION` im Wurzelverzeichnis der SD-Karte wird das DHCP-Skript schon vor dem ersten Lease ersetzt. Das ist **standardmaessig aus** und noch nicht durch einen Kaltstart auf der Kamera bestaetigt (Pruefschritte in [docs/INSTALLATION.md](docs/INSTALLATION.md)). Ob es das Fenster in der Praxis schliesst, zeigt die Zeile `Default-Route vor der Isolation` in `boot.log`.
 2. **Fehlende Authentifizierung:** Die auf der Kamera laufenden Dienste (Telnet mit Root-Shell, FTP, RTSP und der Webserver) besitzen standardmaessig keinen Kennwortschutz.
 3. **Keine Portweiterleitung:** Die Kamera darf unter keinen Umstaenden per Port-Forwarding aus dem Internet erreichbar gemacht werden. Sie gehoert in ein dediziertes, isoliertes Netzwerksegment (z. B. IoT-VLAN).
 4. **Empfohlene Routersperre:** Es wird dringend empfohlen, dem Geraet im heimischen Router (z. B. AVM FRITZ!Box ueber das Zugangsprofil "Gesperrt") saemtliche Internetverbindungen zusaetzlich auf Infrastrukturebene zu sperren.
-5. **IPv6:** Auf dem getesteten Kernel 3.4.35 ist kein IPv6-Stack aktiv (`/proc/net/if_inet6` existiert nicht). Es koennen keine IPv6-Verbindungen aufgebaut werden.
-6. **Notbremse:** Befindet sich auf der SD-Karte die Datei `DISABLE_WEBUI` oder fehlt die Karte beim Booten, startet die Kamera im regulaeren Werkszustand mit voller Cloud-Anbindung.
+5. **Zugriffsschutz der WebUI:** Die API verlangt POST, `Content-Type: application/json`, einen passenden `Referer` und (falls vom Webserver durchgereicht) einen passenden `Origin`. Das schuetzt vor einfachen Fremdseiten-Anfragen (CSRF), aber nicht vor DNS-Rebinding und ersetzt keine Anmeldung; wer im selben Netz ist, kann die Kamera steuern. Siehe [SECURITY.md](SECURITY.md).
+6. **IPv6:** Auf dem getesteten Kernel 3.4.35 ist kein IPv6-Stack aktiv (`/proc/net/if_inet6` existiert nicht). Es koennen keine IPv6-Verbindungen aufgebaut werden.
+7. **Notbremse:** Befindet sich auf der SD-Karte die Datei `DISABLE_WEBUI` oder fehlt die Karte beim Booten, startet die Kamera im regulaeren Werkszustand mit voller Cloud-Anbindung.
 
 Weitere Hinweise sind in [SECURITY.md](SECURITY.md) hinterlegt.
 
@@ -121,6 +123,7 @@ Weitere Hinweise sind in [SECURITY.md](SECURITY.md) hinterlegt.
 ## 7. Rollback und Notbremse
 
 - **Temporaere Deaktivierung:** Datei `DISABLE_WEBUI` im Wurzelverzeichnis der SD-Karte anlegen und Kamera neu starten.
+- **Nur `EARLY_ISOLATION` abschalten:** Datei `EARLY_ISOLATION` von der SD-Karte loeschen; alles andere bleibt unveraendert.
 - **Rueckkehr zum Werkszustand:** SD-Karte entnehmen oder den Aufruf von `start_webui.sh` aus `/etc/jffs2/time_zone.sh` entfernen.
 - Detaillierte Schritte zur vollstaendigen Deinstallation siehe [docs/INSTALLATION.md](docs/INSTALLATION.md).
 
@@ -130,7 +133,8 @@ Weitere Hinweise sind in [SECURITY.md](SECURITY.md) hinterlegt.
 
 - **WebUI reagiert nicht:** Pruefen, ob die Kamera anpingbar ist. Inhalt von `/mnt/anyka_webui/boot.log` pruefen.
 - **RTSP-Stream nicht erreichbar:** Inhalt von `/mnt/anyka_webui/rtsp_supervisor.log` und `/tmp/rtsp.log` pruefen. Pruefen, ob Port 554 lauscht (`netstat -l` oder `/proc/net/tcp`).
-- **Kamera dreht sich nicht:** Status abfragen (`curl -s http://<KAMERA_IP>/cgi-bin/api.cgi?action=status`). Feld `ptz_ready` muss den Wert `1` haben. Pruefen, ob `/tmp/ptz.daemon` als FIFO existiert.
+- **Kamera dreht sich nicht:** Status abfragen (`curl -s http://<KAMERA_IP>/cgi-bin/api.cgi?action=status`). Das Feld `ptz_ready` ist nur `1`, wenn der Prozess `ptz_daemon` laeuft **und** der FIFO `/tmp/ptz.daemon` existiert. Bei `0` die Dateien `/tmp/ptz.log` und `boot.log` pruefen.
+- **Boot-Zeitfenster pruefen:** In `boot.log` steht die Zeile `Default-Route vor der Isolation: JA/NEIN`. `JA` bedeutet, dass die Kamera vor der Isolation kurzzeitig eine Internetroute hatte (siehe Abschnitt 6).
 
 ---
 
@@ -138,17 +142,21 @@ Weitere Hinweise sind in [SECURITY.md](SECURITY.md) hinterlegt.
 
 - **Steuerungs-CLI:** `tools/cam_ctl.py` ermoeglicht Befehlsausfuehrung und Dateiuebertragung per Telnet/FTP ohne externe Abhaengigkeiten.
 - **SD-Build:** `tools/build_sd.sh` erstellt ein sauberes SD-Kartenverzeichnis mit LF-Zeilenenden und SHA-256-Pruefsummen.
-- **Lokale API-Tests:** `tests/test_api.sh` fuehrt 12 automatisierte Tests gegen `api.cgi` auf dem Entwicklungsrechner aus (POST-Pflicht, Validierung, Grenzwerte, Referer, Content-Type, Expect-Logik).
-- **CI:** GitHub Actions prueft Syntax (`dash -n`), ShellCheck, JavaScript (`node --check`), Python (`py_compile`) und fuehrt die API-Tests aus.
+- **Lokale Tests (Host, ohne Kamera):**
+  - `tests/test_api.sh`: 23 Tests gegen `api.cgi` (POST-Pflicht, Validierung, Grenzwerte, Referer/Origin, Content-Type, Race-Schutz, PTZ-Prozesspruefung, LED).
+  - `tests/test_start_webui.sh`: 7 Tests fuer `start_webui.sh` mit Attrappen fuer `ifconfig`, `route`, `mount` (Isolation, Notbremse, Singleton, `EARLY_ISOLATION`).
+  - `tests/test_supervisor.sh`: 5 Tests fuer `rtsp_supervisor.sh` (Start, Einzelinstanz, sauberes Beenden, Health-Check mit Neustart, keine verwaisten Prozesse).
+- **CI:** GitHub Actions prueft Syntax (`dash -n`), ShellCheck, JavaScript (`node --check`), Python (`py_compile`) und fuehrt alle drei Test-Suites aus.
+- **Grenzen der Tests:** Die Tests laufen auf dem Entwicklungsrechner mit `dash`. Das Verhalten auf der Kamera (BusyBox `ash`, uClibc, echte Motoren, WLAN-Boot) pruefen sie nicht; dafuer gibt es die Checkliste in [docs/INSTALLATION.md](docs/INSTALLATION.md).
 
 ---
 
 ## 10. Lizenzen und Danksagung
 
 ### Danksagung an Upstream-Projekte
-- **[MuhammedKalkan/Anyka-Camera-Firmware](https://github.com/MuhammedKalkan/Anyka-Camera-Firmware):** Basis fuer SD-Karten-Methode, `rtsp`-Daemon, `ptz_daemon` und Treiber-Bibliotheken (lizenziert unter der MIT-Lizenz).
-- **[ricardojlrufino/anyka_v380ipcam_experiments](https://github.com/ricardojlrufino/anyka_v380ipcam_experiments):** Analyse und Skripte fuer Anyka V380 / AK3918 Kameras (lizenziert unter der MIT-Lizenz).
-- **[Gerge / VGerris: Anyka_ak3918_hacking_journey](https://github.com/VGerris/Anyka_ak3918_hacking_journey):** Dokumentation der Hardware-Register und Speicherstrukturen (lizenziert unter der GNU General Public License v3.0).
+- **[MuhammedKalkan/Anyka-Camera-Firmware](https://github.com/MuhammedKalkan/Anyka-Camera-Firmware):** Basis fuer SD-Karten-Methode, `rtsp`-Daemon, `ptz_daemon` und Treiber-Bibliotheken (das Repository steht unter der MIT-Lizenz; fuer die enthaltenen Binaries und Herstellerbibliotheken gibt es keine eigene Lizenzangabe). Diese Binaries sind **nicht** Teil dieses Repositories.
+- **[ricardojlrufino/anyka_v380ipcam_experiments](https://github.com/ricardojlrufino/anyka_v380ipcam_experiments):** Analyse und Skripte fuer Anyka V380 / AK3918 Kameras. Das Repository nennt keine Lizenz; es wird hier nur als Quelle genannt, Code daraus ist nicht uebernommen.
+- **[VGerris/Anyka_ak3918_hacking_journey](https://github.com/VGerris/Anyka_ak3918_hacking_journey):** Dokumentation der Hardware-Register und Speicherstrukturen (lizenziert unter der GNU General Public License v3.0). Es wird nur als Quelle genannt, Code daraus ist nicht uebernommen.
 
 ### Eigene Lizenz
 Der Code dieses Projekts ist unter der [MIT-Lizenz](LICENSE) veroeffentlicht.

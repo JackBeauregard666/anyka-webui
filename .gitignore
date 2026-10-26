@@ -31,3 +31,6 @@ __pycache__/
 .DS_Store
 Thumbs.db
 dist/
+
+# Lokale Uebergabe-Notizen (enthalten die Kamera-IP)
+HANDOVER.md

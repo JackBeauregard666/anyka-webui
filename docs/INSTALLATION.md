@@ -51,16 +51,22 @@ Auf der FAT32-formatierten MicroSD-Karte liegt folgende Struktur:
 │   ├── rtsp
 │   └── lib/
 │       └── *.so
-└── anyka_webui/                # Dieses Projekt
-    ├── start_webui.sh
-    ├── rtsp_supervisor.sh
-    ├── bin/
-    │   └── udhcpc_lanonly.sh
-    └── www/
-        ├── index.html
-        └── cgi-bin/
-            └── api.cgi
+├── anyka_webui/                # Dieses Projekt
+│   ├── start_webui.sh
+│   ├── rtsp_supervisor.sh
+│   ├── bin/
+│   │   └── udhcpc_lanonly.sh
+│   ├── www/
+│   │   ├── index.html
+│   │   └── cgi-bin/
+│   │       └── api.cgi
+│   ├── lan_routes.conf         # optional: statische Routen fuer weitere LAN-Subnetze
+│   └── ntp.conf                # optional: LAN-NTP-Server fuer die Zeituebernahme
+├── DISABLE_WEBUI               # optional: Notbremse (Werkszustand)
+└── EARLY_ISOLATION             # optional: DHCP-Skript vor dem ersten Lease ersetzen (siehe 5.2)
 ```
+
+Die Verzeichnisse und Dateien werden mit `tools/build_sd.sh` zusammengestellt (Ausgabe in `dist/sd_card/anyka_webui`, inklusive `SHA256SUMS`).
 
 ---
 
@@ -117,7 +123,76 @@ touch /mnt/DISABLE_WEBUI
 - Die Kamera laeuft im vollstaendigen Werkszustand.
 - **Achtung:** Der Werks-Daemon stellt in diesem Zustand die regulaere Internet- und Cloudverbindung her. Telnet und FTP bleiben erreichbar.
 
-### 5.2 Dauerhafte Deinstallation
+### 5.2 Optional: Isolation vor dem ersten Lease (`EARLY_ISOLATION`)
+Mit einer leeren Datei `EARLY_ISOLATION` im Wurzelverzeichnis der SD-Karte ersetzt `start_webui.sh` das DHCP-Skript schon, bevor `anyka_ipc` die WLAN-Verbindung aufbaut. Der erste Lease setzt dann keinen Default-Gateway mehr, und das ca. 35 Sekunden lange Zeitfenster mit Internetroute entfaellt.
+
+Diese Variante ist **nicht** standardmaessig aktiv, weil das Verhalten des Werks-Daemons beim ersten Lease nur durch einen Kaltstart auf der Kamera bestaetigt werden kann. Pruefen:
+
+1. `touch /mnt/EARLY_ISOLATION`, Kamera neu starten (Kaltstart, Strom trennen).
+2. In `/mnt/anyka_webui/boot.log` muessen stehen: `EARLY_ISOLATION: DHCP-Skript vor dem ersten Lease ersetzt (2 Ziel(e))` (oder `1 Ziel(e)`, wenn nur ein Werksskript existiert) und spaeter `Default-Route vor der Isolation: NEIN`.
+3. WebUI (Port 80) und RTSP (Port 554) muessen wie gewohnt erreichbar sein.
+4. Faellt eines davon aus: Datei `EARLY_ISOLATION` wieder loeschen und neu starten.
+
+### 5.3 Dauerhafte Deinstallation
 1. Entferne das Verzeichnis `/mnt/anyka_webui` von der SD-Karte.
 2. Entferne den `SD-LAUNCHER`-Block aus `/etc/jffs2/time_zone.sh`.
 3. Nach einem Neustart befindet sich das Geraet wieder im regulaeren Werkszustand.
+
+---
+
+## 6. Update einer laufenden Kamera (Telnet/FTP, mit Backup)
+
+Die Befehle laufen auf einem Rechner im selben Netz wie die Kamera. `<KAMERA_IP>` ist durch die Adresse der Kamera zu ersetzen. Es gibt zwei Stufen:
+
+- **Stufe A (ohne Neustart):** nur `index.html` und `api.cgi`. `api.cgi` wird bei jeder Anfrage neu gestartet, `httpd` braucht keinen Neustart.
+- **Stufe B (mit Neustart):** `start_webui.sh`, `rtsp_supervisor.sh`, `udhcpc_lanonly.sh`. Diese Dateien wirken erst nach einem Neustart. Sie werden deshalb erst unmittelbar vor einem geplanten Neustart auf die SD-Karte gelegt, damit ein ungeplanter Neustart (z. B. Stromausfall) nicht mit ungetesteten Skripten bootet.
+
+### 6.1 Backup und Build
+```bash
+CAM=<KAMERA_IP>
+python3 tools/cam_ctl.py --host $CAM exec 'cp -r /mnt/anyka_webui /mnt/anyka_webui.bak_$(date +%Y%m%d_%H%M%S) && ls -d /mnt/anyka_webui.bak_*'
+sh tools/build_sd.sh
+cat dist/sd_card/anyka_webui/SHA256SUMS
+```
+Das Backup liegt auf der SD-Karte neben `anyka_webui`. Der Boot-Hook startet nur `anyka_webui/start_webui.sh`; Backup-Verzeichnisse stoeren nicht. Die `md5sum` der Backup-Dateien muss mit den Originalen uebereinstimmen.
+
+### 6.2 Stufe A: Web-Dateien
+```bash
+for f in www/index.html www/cgi-bin/api.cgi; do
+  python3 tools/cam_ctl.py --host $CAM put dist/sd_card/anyka_webui/$f /mnt/anyka_webui/$f
+done
+python3 tools/cam_ctl.py --host $CAM exec 'cd /mnt/anyka_webui && md5sum www/index.html www/cgi-bin/api.cgi'
+```
+`put` gibt je Datei die MD5-Summe aus; beide Werte muessen uebereinstimmen. Dann die Kopie in `/tmp/www` erneuern (die Web-Dateien werden beim Boot dorthin gespiegelt):
+```bash
+python3 tools/cam_ctl.py --host $CAM exec 'cp -f /mnt/anyka_webui/www/index.html /tmp/www/ && cp -f /mnt/anyka_webui/www/cgi-bin/api.cgi /tmp/www/cgi-bin/ && chmod 755 /tmp/www/cgi-bin/api.cgi'
+curl -s "http://$CAM/cgi-bin/api.cgi?action=status"
+curl -s -X POST -H "Content-Type: application/json" -e "http://$CAM/" "http://$CAM/cgi-bin/api.cgi?action=turn&dpan=15&dtilt=0&dry=1"
+```
+Erwartung: Status mit `"ok":true`, `"ptz_ready":1`, `"rtsp_ready":1`, `"lan_isolated":true` und dem Feld `led_on`; der Trockenlauf liefert `"dry":true` ohne Bewegung. Negativtests: derselbe POST ohne `-e` liefert `bad_referer`, `action=calibrate` liefert `invalid_action`.
+
+Ist `ptz_ready` 0, obwohl `ptz_daemon` laeuft, hat der Prozess in `/proc/<pid>/stat` moeglicherweise einen anderen Namen. Dann die alte `api.cgi` aus dem Backup nach `/tmp/www/cgi-bin/` zurueckkopieren und die Ausgabe von `cat /proc/$(pidof ptz_daemon)/stat` auswerten.
+
+### 6.3 Stufe B: Start-Skripte und Supervisor (Neustart noetig)
+Ein Neustart unterbricht RTSP und WebUI kurz und wird nur nach ausdruecklicher Freigabe ausgefuehrt. Ablauf:
+```bash
+for f in start_webui.sh rtsp_supervisor.sh bin/udhcpc_lanonly.sh; do
+  python3 tools/cam_ctl.py --host $CAM put dist/sd_card/anyka_webui/$f /mnt/anyka_webui/$f
+done
+python3 tools/cam_ctl.py --host $CAM exec 'cd /mnt/anyka_webui && md5sum start_webui.sh rtsp_supervisor.sh bin/udhcpc_lanonly.sh'
+```
+MD5-Summen vergleichen, dann Kamera neu starten (am sichersten: Strom trennen und wieder anschliessen, mit Zugriff auf die SD-Karte fuer den Notfall).
+
+### 6.4 Pruefliste nach dem Neustart
+1. `cat /mnt/anyka_webui/boot.log`: Eintraege `www gespiegelt`, `WLAN-Verbindung steht`, `Default-Route vor der Isolation: ...`, `LAN-only aktiv (kein Gateway, DHCP-Skript ersetzt, DNS geleert)`, `ptz_daemon gestartet`, `httpd auf Port 80 gestartet`, `rtsp_supervisor gestartet`. Keine Zeile mit `WARNUNG` oder `FEHLER`.
+2. `cat /proc/net/route`: keine Zeile mit Destination `00000000` und Mask `00000000`.
+3. `curl -s "http://<KAMERA_IP>/cgi-bin/api.cgi?action=status"`: `ptz_ready":1`, `rtsp_ready":1`, `lan_isolated":true`.
+4. RTSP: `rtsp://<KAMERA_IP>:554/vs0` und `/vs1` in VLC oeffnen; `cat /mnt/anyka_webui/rtsp_supervisor.log` zeigt einen Start und keine Neustart-Schleife.
+5. PTZ mit kleinen Schritten pruefen (z. B. 15 Grad rechts, 15 Grad hoch) und im Video kontrollieren, dass die Richtungen der Anzeige (rechts/links, hoch/runter) zur tatsaechlichen Bewegung passen.
+6. Ein zweiter Kaltstart zur Gegenprobe (Stromversorgung trennen) liefert dieselben Ergebnisse.
+
+### 6.5 Zurueck zum vorherigen Stand
+```bash
+python3 tools/cam_ctl.py --host $CAM exec 'rm -rf /mnt/anyka_webui && cp -r /mnt/anyka_webui.bak_<ZEITSTEMPEL> /mnt/anyka_webui'
+```
+Danach Neustart (oder Stufe A mit den zurueckgesicherten Web-Dateien). Ist die Kamera nicht mehr erreichbar: SD-Karte am Rechner einlegen, `anyka_webui` aus dem Backup-Ordner zurueckkopieren oder eine leere Datei `DISABLE_WEBUI` in das Wurzelverzeichnis legen (Werkszustand, mit Cloud-Anbindung; Router-Sperre beachten).

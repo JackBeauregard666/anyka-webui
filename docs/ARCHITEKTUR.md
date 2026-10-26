@@ -13,9 +13,11 @@ Die Kamera basiert auf dem Anyka AK3918EN080 V200 SoC (ARM926EJ-S, ARMv5TEJ-Arch
 | **~7 s** | SD-Erkennung | SD-Launcher erkennt Mountpoint `/mnt` (`/dev/mmcblk0p1`) und startet `start_webui.sh`. |
 | **~7 s** | Web-Mirroring | Web-Dateien werden von der SD-Karte nach `/tmp/www` (RAM/tmpfs) gespiegelt. |
 | **~20–35 s** | WLAN-Verbindung | Werks-Daemon `anyka_ipc` initialisiert WLAN-Treiber, WPA und erhaelt DHCP-Lease. |
-| **~35 s** | LAN-Isolation | `start_webui.sh` erkennt IPv4 an `wlan0`, bind-mountet `udhcpc_lanonly.sh`, loescht Default-Gateways und leert DNS. |
+| **~35 s** | LAN-Isolation | `start_webui.sh` erkennt IPv4 an `wlan0`, bind-mountet `udhcpc_lanonly.sh`, loescht Default-Gateways und leert DNS. Vorher protokolliert es, ob bis dahin eine Default-Route bestand (`Default-Route vor der Isolation: JA/NEIN`). |
 | **~35 s** | Dienste-Start | `ptz_daemon` (FIFO `/tmp/ptz.daemon`), `httpd` (Port 80) und `rtsp_supervisor.sh` starten. |
 | **~37 s** | RTSP-Ablösung | `rtsp_supervisor.sh` beendet `anyka_ipc`, uebergibt Sensorschnittstelle an `/mnt/custom/rtsp` (Port 554). |
+
+Mit der optionalen Datei `EARLY_ISOLATION` auf der SD-Karte wird der Bind-Mount des DHCP-Skripts bereits im Schritt "~7 s" ausgefuehrt, also vor dem ersten Lease. Diese Variante ist standardmaessig aus und auf der Kamera noch nicht per Kaltstart bestaetigt.
 
 ---
 
@@ -23,13 +25,14 @@ Die Kamera basiert auf dem Anyka AK3918EN080 V200 SoC (ARM926EJ-S, ARMv5TEJ-Arch
 
 ### 2.1 Hardware-Treiber und Motoren
 - **Treiber:** `/dev/ak-motor0` (Pan / horizontal), `/dev/ak-motor1` (Tilt / vertikal).
-- **Motoren:** 28BYJ-48 Schrittmotoren (5V, 4 Phasen).
-- **Feedback:** Keine Hardware-Endschalter und keine Hall-Pins (`PTZ_FEEDBACK_PIN_NONE = 0`).
+- **Motoren:** Schrittmotoren, vermutlich vom Typ 28BYJ-48 (5V, 4 Phasen); der Typ ist nicht am Geraet verifiziert.
+- **Feedback:** Nach dem Treiber-Code keine Hardware-Endschalter und keine Hall-Pins (`PTZ_FEEDBACK_PIN_NONE = 0`). Das passt zur Beobachtung, dass die Blickrichtung nach einem Kaltstart nicht reproduzierbar ist.
 
 ### 2.2 Problem der absoluten Koordinaten
 1. Nach einem Kaltstart setzt `ptz_daemon` interne Software-Zaehler auf `0`, unabhaengig von der tatsaechlichen Ausrichtung der Kamera.
-2. Beim Werks-Start fuehrt `anyka_ipc` eine unvollstaendige Fahrt durch (Tilt faehrt gegen Anschlag, Pan bleibt unreferenziert).
-3. Bei sprunghaftem Anfahren gespeicherter Koordinaten rammen die Motoren gegen die mechanischen Anschlaege.
+2. Beobachtung: Am Ende des Startvorgangs zeigt die Kamera in eine nicht reproduzierbare Richtung. Vermutete Ursache (nicht bewiesen): Der Werks-Start fuehrt eine unvollstaendige Referenzfahrt durch, bei der nur Tilt gegen einen Anschlag faehrt und Pan unreferenziert bleibt.
+3. Folgerung: `ptz.ini` (Zaehlerstand, wird am Ende jeder Fahrt gespeichert) und die tatsaechliche Blickrichtung stimmen nach einem Neustart nicht sicher ueberein. Absolute Koordinaten waeren daher irrefuehrend, und die Soft-Limits sind ein Richtwert relativ zu einem unbekannten Startpunkt, kein exakter Anschlagschutz.
+4. Aus demselben Grund gibt es keine Home-/`init`-Fahrt: Sie haette keinen definierten Zielzustand.
 
 ### 2.3 Loesung: Rein relative Steuerung
 - Die Benutzeroberflaeche und die API operieren ausschliesslich relativ zur aktuellen Blickrichtung:
@@ -37,15 +40,21 @@ Die Kamera basiert auf dem Anyka AK3918EN080 V200 SoC (ARM926EJ-S, ARMv5TEJ-Arch
   - $\Delta\text{tilt} \in [-60, +60]$ (groesser = runter, kleiner = hoch).
 - `api.cgi` fuehrt die Berechnung aus:
   $$\text{Ziel-Pan} = \text{Ist-Pan} + \Delta\text{pan}, \quad \text{Ziel-Tilt} = \text{Ist-Tilt} + \Delta\text{tilt}$$
-- Zielwerte werden an den Software-Grenzen geklemmt:
+- Zielwerte werden an den Software-Grenzen geklemmt (bezogen auf den `ptz.ini`-Zaehlerstand, siehe 2.2):
   - Pan: $15 \dots 335$ (Mitte: 175).
   - Tilt: $15 \dots 110$ (Bereich: 95 Einheiten).
-- **Einheit:** 1 Rohwert entspricht $1{,}0^\circ$ physischer Drehung (per Bildmessung verifiziert).
+- **Einheit:** 1 Rohwert entspricht nach Bildmessung des Projektautors etwa $1{,}0^\circ$ physischer Drehung.
 - **Drehgeschwindigkeit:** $\sim 25^\circ/\text{s}$.
 - **Fahrtdauer-Formel:**
   $$T_{\text{busy}} = 1000\,\text{ms} + \frac{\max(|\Delta\text{pan}|, |\Delta\text{tilt}|) \times 1000}{25}$$
 
-### 2.4 Baseline-Race-Schutz (`ptz_expect`)
+### 2.4 Einzelschritte (Pfeiltasten)
+`up`, `down`, `left`, `right` werden unveraendert an den Daemon weitergegeben (1 Schritt = 10 Rohwerte). Sie laufen durch dieselbe Sperre (Busy-Datei), werden aber nicht an den Soft-Limits geklemmt; eine offene Zielvorgabe (`ptz_expect`) wird dabei verworfen.
+
+### 2.5 Pruefung des PTZ-Daemons
+`api.cgi` meldet den PTZ-Dienst nur als bereit, wenn der FIFO existiert **und** ein Prozess mit dem Namen `ptz_daemon` laeuft (Lesen von `/proc/<pid>/stat`, ohne Fork). Ein verwaister FIFO nach einem Absturz des Daemons wuerde sonst Befehle annehmen, die niemand ausfuehrt.
+
+### 2.6 Baseline-Race-Schutz (`ptz_expect`)
 Da der C++-Daemon `ptz_daemon` die Datei `/etc/jffs2/ptz.ini` asynchron nach Beginn des Fahrbefehls aktualisiert, speichert `api.cgi` die erwartete Zielposition in `/tmp/ptz_expect`:
 - Beim naechsten Aufruf wird geprueft: Entspricht `ptz.ini` der Erwartung, gilt die Fahrt als beendet.
 - Weicht `ptz.ini` ab und das Zeitfenster plus $3\,\text{s}$ Reserve ist noch nicht verstrichen, wird die Anfrage mit `err: "busy"` abgewiesen.
@@ -61,7 +70,7 @@ Da der C++-Daemon `ptz_daemon` die Datei `/etc/jffs2/ptz.ini` asynchron nach Beg
 | :--- | :--- | :--- | :--- |
 | **0 s bis WLAN-IP (~35 s)** | Aktiv (vom Router vergeben) | Aktiv (vom Router vergeben) | Zeitfenster fuer Cloud-Verbindungen von `anyka_ipc`. |
 | **Ab ~35 s (start_webui.sh)** | Geloescht (`route del default`) | Geleert (`# LAN-ONLY MODE`) | Unterbunden (`Network is unreachable`). |
-| **Dauerbetrieb (Steady-State)** | Geloescht (Daemon-Hook + 60s-Guard) | Geleert | Unterbunden. |
+| **Dauerbetrieb (Steady-State)** | Geloescht (ueberdecktes DHCP-Skript + 60s-Guard) | Geleert | Unterbunden. |
 | **Notbremse (DISABLE_WEBUI)** | Aktiv (Werkszustand) | Aktiv (Werkszustand) | Cloud aktiv (Originalzustand). |
 
 ### 3.2 Vergleich DHCP-Skripte: Werksskript vs. `udhcpc_lanonly.sh`
