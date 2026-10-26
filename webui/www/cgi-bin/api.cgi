@@ -13,6 +13,8 @@ PROC_ROUTE="${PROC_ROUTE:-/proc/net/route}"
 PROC_MEMINFO="${PROC_MEMINFO:-/proc/meminfo}"
 PROC_UPTIME="${PROC_UPTIME:-/proc/uptime}"
 PROC_WIRELESS="${PROC_WIRELESS:-/proc/net/wireless}"
+PROC_DIR="${PROC_DIR:-/proc}"
+PTZ_PROC_NAME="${PTZ_PROC_NAME:-ptz_daemon}"
 
 # Feste physikalische und rechnerische Konstanten
 PAN_MIN=15
@@ -42,7 +44,7 @@ OLD_IFS="$IFS"
 IFS="&"
 for param in $COMBINED_PARAMS; do
     case "$param" in
-        action=up|action=down|action=left|action=right|action=calibrate|action=status|action=light_on|action=light_off|action=turn)
+        action=up|action=down|action=left|action=right|action=status|action=light_on|action=light_off|action=turn)
             ACTION="${param#action=}"
             ;;
         dpan=*)
@@ -62,6 +64,24 @@ if [ -z "$ACTION" ]; then
     printf '{"ok":false,"err":"invalid_action"}\n'
     exit 0
 fi
+
+# Laeuft der PTZ-Daemon wirklich? Ein FIFO in /tmp bleibt auch nach einem Absturz
+# des Daemons bestehen und wuerde sonst "bereit" vortaeuschen. Pruefung ohne
+# Fork ueber /proc/<pid>/stat (zweites Feld = "(Prozessname)").
+ptz_daemon_running() {
+    [ -p "$PTZ_FIFO" ] || return 1
+    set +f
+    for _d in "$PROC_DIR"/[0-9]*; do
+        [ -r "$_d/stat" ] || continue
+        read -r _pid _comm _ < "$_d/stat" 2>/dev/null || continue
+        if [ "$_comm" = "($PTZ_PROC_NAME)" ]; then
+            set -f
+            return 0
+        fi
+    done
+    set -f
+    return 1
+}
 
 # Uptime erfassen
 read -r UP _ < "$PROC_UPTIME" 2>/dev/null || UP="0 0"
@@ -153,8 +173,8 @@ if [ "$ACTION" = "status" ]; then
     # Port 554 im LISTEN-Zustand (0A) ohne Fork aus /proc/net/tcp lesen
     RTSP_READY=0
     if [ -r "$PROC_TCP" ]; then
-        while read -r _ local _ st _; do
-            case "$local" in
+        while read -r _ laddr _ st _; do
+            case "$laddr" in
                 *:022A)
                     if [ "$st" = "0A" ]; then
                         RTSP_READY=1
@@ -165,9 +185,9 @@ if [ "$ACTION" = "status" ]; then
         done < "$PROC_TCP"
     fi
 
-    # PTZ Daemon FIFO pruefen
+    # PTZ-Daemon: FIFO vorhanden UND Prozess laeuft
     PTZ_READY=0
-    [ -p "$PTZ_FIFO" ] && PTZ_READY=1
+    ptz_daemon_running && PTZ_READY=1
 
     # LED-Status aus Sysfs lesen
     LED_STATUS=0
@@ -191,18 +211,25 @@ if [ "$REQUEST_METHOD" != "POST" ]; then
     exit 0
 fi
 
-# Referer-Pruefung: Fehlender oder leere Referer wird abgewiesen
+# Herkunftspruefung (CSRF): Der Referer muss mit "http://<Host>/" BEGINNEN
+# (Praefix-Vergleich, kein Teilstring). Sendet der Browser zusaetzlich einen
+# Origin-Header, muss dieser exakt "http://<Host>" sein. Fehlende oder leere
+# Header werden abgewiesen. Gegen DNS-Rebinding hilft das nicht (siehe SECURITY.md).
 if [ -z "$HTTP_REFERER" ] || [ -z "$HTTP_HOST" ]; then
     printf '{"ok":false,"err":"bad_referer"}\n'
     exit 0
 fi
 case "$HTTP_REFERER" in
-    *"//$HTTP_HOST/"*|*"//$HTTP_HOST") ;;
+    "http://$HTTP_HOST/"*|"http://$HTTP_HOST") ;;
     *)
         printf '{"ok":false,"err":"bad_referer"}\n'
         exit 0
         ;;
 esac
+if [ -n "$HTTP_ORIGIN" ] && [ "$HTTP_ORIGIN" != "http://$HTTP_HOST" ]; then
+    printf '{"ok":false,"err":"bad_origin"}\n'
+    exit 0
+fi
 
 # Content-Type-Pruefung: application/json fordern
 case "$CONTENT_TYPE" in
@@ -233,8 +260,8 @@ if [ "$ACTION" = "light_off" ]; then
     exit 0
 fi
 
-# Daemon-Check (FIFO muss existieren)
-if [ ! -p "$PTZ_FIFO" ]; then
+# Daemon-Check (FIFO muss existieren und der Prozess laufen)
+if ! ptz_daemon_running; then
     printf '{"ok":false,"err":"ptz_daemon_not_running"}\n'
     exit 0
 fi
@@ -246,7 +273,7 @@ acquire_lock() {
     type usleep >/dev/null 2>&1 && _has_usleep=1
     while ! mkdir "$PTZ_LOCK" 2>/dev/null; do
         _tries=$((_tries + 1))
-        # Stale-Lock-Erkennung: Aelter als 5s aufbrechen
+        # Stale-Lock-Erkennung: Nach 20 Versuchen (ca. 2 s mit usleep) den Lock aufbrechen
         if [ "$_tries" -ge 20 ]; then
             rmdir "$PTZ_LOCK" 2>/dev/null
             if mkdir "$PTZ_LOCK" 2>/dev/null; then
@@ -401,7 +428,10 @@ if [ "$ACTION" = "turn" ]; then
     exit 0
 fi
 
-# ----------------- AKTIONEN: RICHTUNGSTASTEN & CALIBRATE -----------------
+# ----------------- AKTIONEN: RICHTUNGSTASTEN (EINZELSCHRITT) -----------------
+# Ein Schritt = 10 Rohwerte im Daemon (ca. 0,4 s Fahrt plus Anlauf). Es gibt
+# bewusst keine "init"/Home-Fahrt: Die Position nach einem Neustart ist nicht
+# reproduzierbar, eine Referenzfahrt hat daher keinen definierten Zielzustand.
 # Busy-Pruefung unter Lock
 if ! acquire_lock; then
     printf '{"ok":false,"err":"busy","busy_remaining_s":1}\n'
@@ -422,15 +452,8 @@ PTZ_CMD=""
 BUSY_ADD=2
 
 case "$ACTION" in
-    calibrate)
-        PTZ_CMD="init"
-        BUSY_ADD=5
-        ;;
     up|down|left|right)
         PTZ_CMD="$ACTION"
-        # 1 relativer Schritt = 10 Rohwerte im C++ Daemon (Dauer ~1.4s)
-        BUSY_ADD=$((BASE_RESERVE_MS / 1000 + (10 / SPEED_DEG_PER_S) + 1))
-        [ "$BUSY_ADD" -lt 2 ] && BUSY_ADD=2
         ;;
 esac
 
@@ -441,6 +464,8 @@ if [ "$DRY" -eq 1 ]; then
 fi
 
 echo "$((UP_S + BUSY_ADD))" > "$BUSY_FILE"
+# Eine fruehere Zielvorgabe (turn) gilt nach einem Einzelschritt nicht mehr
+rm -f "$EXPECT_FILE"
 release_lock
 
 if { printf '%s\n' "$PTZ_CMD" >&3; } 3<>"$PTZ_FIFO" 2>/dev/null; then

@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="referrer" content="same-origin">
 <title>Anyka Domecam WebUI</title>
 <style>
 :root {
@@ -150,6 +151,10 @@ header {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--accent);
+}
+@media (max-width: 480px) {
+  /* Schmale Displays: URL umbrechen statt abschneiden, sonst ist vs0/vs1 nicht lesbar */
+  .rtsp-url { white-space: normal; word-break: break-all; }
 }
 
 /* Buttons */
@@ -450,7 +455,7 @@ input:checked + .slider:before { transform: translateX(16px); background-color: 
 
   <div class="permanent-banner">
     <svg viewBox="0 0 24 24"><path d="M11 15h2v2h-2zm0-8h2v6h-2zm1-5C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>
-    <span>Die Bewegungen sind relativ. Nach einem Neustart zeigt die Kamera in eine zufällige Richtung.</span>
+    <span>Alle Bewegungen sind relativ zur aktuellen Blickrichtung. Nach einem Neustart zeigt die Kamera in eine zufällige Richtung; die Grenzen sind Software-Grenzen und stimmen nicht exakt mit den mechanischen Anschlägen überein.</span>
   </div>
 
   <div class="grid">
@@ -541,9 +546,9 @@ input:checked + .slider:before { transform: translateX(16px); background-color: 
         </button>
       </div>
 
-      <!-- Feinjustierung & Home -->
+      <!-- Feinjustierung per Einzelschritt -->
       <details class="micro-ptz-details">
-        <summary>Feinjustierung per Einzelschritt & Home</summary>
+        <summary>Feinjustierung per Einzelschritt</summary>
         <div class="micro-ptz-body">
           <div class="ptz-matrix">
             <div></div>
@@ -571,10 +576,6 @@ input:checked + .slider:before { transform: translateX(16px); background-color: 
               <span class="slider"></span>
             </label>
           </div>
-          <button type="button" class="ctrl-btn" onclick="sendMicroPtz('calibrate')" style="width:100%;">
-            <svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 13c0-4.42-3.58-8-8-8zm-6 8c0-1.01.25-1.97.7-2.8L5.24 8.74A7.93 7.93 0 0 0 4 13c0 4.42 3.58 8 8 8v4l5-5-5-5v4c-3.31 0-6-2.69-6-6z"/></svg>
-            <span>Gespeicherte Position anfahren (Home)</span>
-          </button>
         </div>
       </details>
     </div>
@@ -885,6 +886,26 @@ function setBusyState(busy, remainingSec, customMsg) {
   }
 }
 
+// --- Fehlertexte ---
+const ERR_TEXT = {
+  ptz_invalid: 'PTZ-Position ungültig',
+  ptz_daemon_not_running: 'PTZ-Dienst läuft nicht',
+  ptz_fifo_open_failed: 'PTZ-Dienst nicht erreichbar',
+  bad_referer: 'Anfrage abgelehnt (Referer fehlt oder passt nicht)',
+  bad_origin: 'Anfrage abgelehnt (Origin passt nicht)',
+  bad_content_type: 'Anfrage abgelehnt (Content-Type)',
+};
+
+function errText(err) {
+  return `Fehler: ${ERR_TEXT[err] || err || 'Unbekannt'}`;
+}
+
+function showRideError(text) {
+  const statusBox = document.getElementById('ride-status');
+  statusBox.className = 'ride-status-box ride-status-err';
+  statusBox.textContent = text;
+}
+
 // --- Fahrt ausfuehren ---
 function executeTurn() {
   if (isBusy) return;
@@ -919,12 +940,8 @@ function executeTurn() {
         setBusyState(false);
         if (data.err === 'busy') {
           setBusyState(true, data.busy_remaining_s || 2, `Kamera ist beschäftigt (noch ${data.busy_remaining_s}s)`);
-        } else if (data.err === 'ptz_invalid') {
-          statusBox.className = 'ride-status-box ride-status-err';
-          statusBox.textContent = 'Fehler: PTZ-Position ungültig';
         } else {
-          statusBox.className = 'ride-status-box ride-status-err';
-          statusBox.textContent = `Fehler: ${data.err || 'Unbekannt'}`;
+          showRideError(errText(data.err));
         }
       }
     })
@@ -939,7 +956,7 @@ function executeTurn() {
 function sendMicroPtz(act) {
   if (isBusy) return;
   lastClampedMessage = null;
-  setBusyState(true, act === 'calibrate' ? 5 : 2);
+  setBusyState(true, 2);
   fetch(`/cgi-bin/api.cgi?action=${act}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -947,12 +964,17 @@ function sendMicroPtz(act) {
   })
     .then(r => r.json())
     .then(data => {
-      if (!data.ok && data.err === 'busy') {
+      if (data.ok) return;
+      if (data.err === 'busy') {
         setBusyState(true, data.busy_remaining_s || 2);
+      } else {
+        setBusyState(false);
+        showRideError(errText(data.err));
       }
     })
     .catch(() => {
       setBusyState(false);
+      showRideError('Verbindungsfehler');
     });
 }
 
