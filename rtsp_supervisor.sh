@@ -1,8 +1,12 @@
 #!/bin/sh
 SD_MOUNT="${SD_MOUNT:-/mnt}"
 RTSP_BIN="$SD_MOUNT/custom/rtsp"
-LOCK=/tmp/rtsp_supervisor.pid
-RLOG=/tmp/rtsp.log
+# Nur fuer Host-Tests (tests/test_supervisor.sh) ueberschreibbar
+T="${SUP_TMP_DIR:-/tmp}"
+PROC_TCP="${SUP_PROC_TCP:-/proc/net/tcp}"
+HEALTH_DELAY="${SUP_HEALTH_DELAY:-45}"
+LOCK="$T/rtsp_supervisor.pid"
+RLOG="$T/rtsp.log"
 SLOG="$SD_MOUNT/anyka_webui/rtsp_supervisor.log"
 LAST="$SD_MOUNT/anyka_webui/rtsp_last_exit.log"
 export LD_LIBRARY_PATH="$SD_MOUNT/custom/lib:/usr/lib:/lib"
@@ -40,7 +44,7 @@ running() {
 }
 
 check_port_554() {
-  if [ -r /proc/net/tcp ]; then
+  if [ -r "$PROC_TCP" ]; then
     while read -r _ local _ st _; do
       case "$local" in
         *:022A)
@@ -49,7 +53,7 @@ check_port_554() {
           fi
           ;;
       esac
-    done < /proc/net/tcp
+    done < "$PROC_TCP"
   fi
   return 1
 }
@@ -93,12 +97,18 @@ while true; do
   pid=$!
   log "rtsp gestartet PID $pid"
 
-  # Health-Check: Lauscht Port 554 nach 45s?
+  # Health-Check: Lauscht Port 554 nach HEALTH_DELAY Sekunden (45)?
+  # Die Wartezeit laeuft in 1-s-Schritten und endet sofort, sobald rtsp beendet ist;
+  # so bleibt nach einem Neustart kein verwaistes "sleep 45" zurueck.
   (
-    sleep 45
-    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+    w=0
+    while [ "$w" -lt "$HEALTH_DELAY" ] && kill -0 "$pid" 2>/dev/null; do
+      sleep 1
+      w=$((w + 1))
+    done
+    if kill -0 "$pid" 2>/dev/null; then
       if ! check_port_554; then
-        echo "[$(upt)s] Health-Check fehlgeschlagen: Port 554 lauscht nach 45s nicht -> Neustart" >> "$SLOG"
+        echo "[$(upt)s] Health-Check fehlgeschlagen: Port 554 lauscht nach ${HEALTH_DELAY}s nicht -> Neustart" >> "$SLOG"
         kill "$pid" 2>/dev/null
       fi
     fi

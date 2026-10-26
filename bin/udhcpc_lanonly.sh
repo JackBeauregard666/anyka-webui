@@ -32,6 +32,7 @@ case "$1" in
         # Optionale statische Client-Routen
         if [ -r "$CONF" ] && [ -n "$router" ]; then
             CLIENT_ROUTES=""
+            # shellcheck source=/dev/null
             . "$CONF"
             set -- $router
             gw1="$1"
