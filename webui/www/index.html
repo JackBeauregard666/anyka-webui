@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anyka Domecam WebUI</title>
+<style>
+:root {
+  --bg: #121316;
+  --surface: #1a1c22;
+  --surface-2: #242731;
+  --border: #2e3342;
+  --text: #e6edf3;
+  --text-muted: #8b949e;
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --radius: 10px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  padding: 16px;
+  min-height: 100vh;
+}
+.container {
+  max-width: 960px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+.brand svg { width: 24px; height: 24px; fill: var(--accent); }
+.badge {
+  font-size: 0.75rem;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.badge-iso { background: rgba(16, 185, 129, 0.2); color: var(--success); border: 1px solid var(--success); }
+.badge-wan { background: rgba(245, 158, 11, 0.2); color: var(--warning); border: 1px solid var(--warning); }
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+@media (min-width: 768px) {
+  .grid { grid-template-columns: 3fr 2fr; }
+}
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.card-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.card-title svg { width: 16px; height: 16px; fill: currentColor; }
+
+.permanent-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid var(--warning);
+  color: var(--warning);
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+.permanent-banner svg { width: 20px; height: 20px; flex-shrink: 0; fill: currentColor; }
+
+/* RTSP Box */
+.rtsp-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.rtsp-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.85rem;
+}
+.rtsp-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+.rtsp-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.rtsp-url {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--accent);
+}
+
+/* Buttons */
+button {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+button:hover:not(:disabled) { background: var(--border); }
+button:active:not(:disabled) { transform: scale(0.98); }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+button.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+button.btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+button svg { width: 14px; height: 14px; fill: currentColor; }
+
+/* Relative PTZ Dial */
+.dial-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+}
+.dial-wrapper {
+  position: relative;
+  width: 220px;
+  height: 220px;
+  touch-action: none;
+  user-select: none;
+}
+.dial-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+  cursor: grab;
+}
+.dial-svg:active { cursor: grabbing; }
+
+.dial-value-badge {
+  text-align: center;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--accent);
+  min-height: 1.6rem;
+}
+
+/* Presets */
+.preset-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+.preset-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.preset-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.preset-buttons button {
+  flex: 1 1 calc(25% - 6px);
+  padding: 6px 8px;
+  font-size: 0.8rem;
+}
+
+/* Tilt Section */
+.tilt-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.tilt-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+}
+.tilt-val {
+  font-weight: 700;
+  color: var(--accent);
+}
+.tilt-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.tilt-slider-row span {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  width: 44px;
+}
+.tilt-slider-row span.right { text-align: right; }
+.range-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--border);
+  outline: none;
+  cursor: pointer;
+}
+.range-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #fff;
+  cursor: pointer;
+}
+.range-slider::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #fff;
+  cursor: pointer;
+}
+
+/* Feedback / Status */
+.ride-status-box {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+.ride-status-idle { color: var(--text-muted); background: transparent; }
+.ride-status-busy { color: var(--warning); background: rgba(245, 158, 11, 0.15); border: 1px solid var(--warning); }
+.ride-status-clamped { color: var(--warning); background: rgba(245, 158, 11, 0.2); border: 1px solid var(--warning); }
+.ride-status-done { color: var(--success); background: rgba(16, 185, 129, 0.15); border: 1px solid var(--success); }
+.ride-status-err { color: var(--danger); background: rgba(239, 68, 68, 0.15); border: 1px solid var(--danger); }
+
+/* Execution Bar */
+.exec-bar {
+  display: flex;
+  gap: 8px;
+}
+.exec-bar button { flex: 1; }
+
+/* Micro PTZ Grid (Secondary) */
+.micro-ptz-details {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  background: var(--surface);
+}
+.micro-ptz-details summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  user-select: none;
+  font-weight: 600;
+}
+.micro-ptz-body {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ptz-matrix {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  max-width: 200px;
+  margin: 0 auto;
+  width: 100%;
+}
+.ptz-btn {
+  aspect-ratio: 1;
+  font-size: 1.1rem;
+  font-weight: bold;
+}
+
+/* System Status Grid */
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+}
+.status-item {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 10px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.status-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; }
+.status-val { font-size: 1.05rem; font-weight: 600; }
+
+.toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: var(--surface-2);
+  border: 1px solid var(--accent);
+  color: var(--text);
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  opacity: 0;
+  transform: translateY(10px);
+  transition: all 0.2s ease;
+  pointer-events: none;
+  z-index: 1000;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="brand">
+      <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/></svg>
+      <span>Anyka Domecam</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <button onclick="toggleLight()" id="btn-light">
+        <svg viewBox="0 0 24 24"><path d="M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9v1zm3-19C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7z"/></svg>
+        <span>LED</span>
+      </button>
+      <div id="iso-badge" class="badge badge-iso">LAN-ISOLIERT</div>
+    </div>
+  </header>
+
+  <!-- Dauerhafter Hinweis nach Anforderung -->
+  <div class="permanent-banner">
+    <svg viewBox="0 0 24 24"><path d="M11 15h2v2h-2zm0-8h2v6h-2zm1-5C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>
+    <span>Bewegungen sind relativ. Nach einem Neustart ist die Blickrichtung zufällig.</span>
+  </div>
+
+  <div class="grid">
+    <!-- RTSP Streaming Box (ersetzt Live-Vorschau) -->
+    <div class="card">
+      <div class="card-title">
+        <svg viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12z"/></svg>
+        <span>RTSP-Stream Integration</span>
+      </div>
+      <p style="font-size:0.85rem; color:var(--text-muted);">
+        Live-Video wird mit 25 FPS über RTSP (Port 554) übertragen. Nutze VLC, Home Assistant oder einen RTSP-Client deiner Wahl.
+      </p>
+      <div class="rtsp-box">
+        <div class="rtsp-row">
+          <div class="rtsp-info">
+            <span class="rtsp-label">Main Stream (HD 1080p)</span>
+            <span id="url-vs0" class="rtsp-url">rtsp://.../vs0</span>
+          </div>
+          <button onclick="copyRtsp('vs0')">Kopieren</button>
+        </div>
+        <div class="rtsp-row">
+          <div class="rtsp-info">
+            <span class="rtsp-label">Sub Stream (480p)</span>
+            <span id="url-vs1" class="rtsp-url">rtsp://.../vs1</span>
+          </div>
+          <button onclick="copyRtsp('vs1')">Kopieren</button>
+        </div>
+        <div style="display:flex; justify-content: flex-end; margin-top:4px;">
+          <button onclick="downloadM3u(['vs0','vs1'])" class="btn-primary">
+            <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+            <span>VLC Playlist (.m3u) herunterladen</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Relative PTZ Steuerung -->
+    <div class="card">
+      <div class="card-title">
+        <svg viewBox="0 0 24 24"><path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/></svg>
+        <span>Relative PTZ-Steuerung</span>
+      </div>
+
+      <!-- Relativer Drehkreis -->
+      <div class="dial-container">
+        <div class="dial-wrapper" id="dial-wrap">
+          <svg class="dial-svg" id="dial-svg" viewBox="0 0 200 200">
+            <!-- Kreis-Hintergrund -->
+            <circle cx="100" cy="100" r="80" fill="none" stroke="var(--border)" stroke-width="8"/>
+            <!-- 12-Uhr Markierung (Jetzt / 0°) -->
+            <line x1="100" y1="12" x2="100" y2="24" stroke="var(--text-muted)" stroke-width="2"/>
+            <text x="100" y="8" fill="var(--text-muted)" font-size="9" text-anchor="middle" font-weight="bold">JETZT (0°)</text>
+            <!-- 3-Uhr (90° R) -->
+            <line x1="176" y1="100" x2="188" y2="100" stroke="var(--border)" stroke-width="2"/>
+            <text x="195" y="103" fill="var(--text-muted)" font-size="8" text-anchor="start">90°R</text>
+            <!-- 9-Uhr (90° L) -->
+            <line x1="12" y1="100" x2="24" y2="100" stroke="var(--border)" stroke-width="2"/>
+            <text x="5" y="103" fill="var(--text-muted)" font-size="8" text-anchor="end">90°L</text>
+            <!-- 6-Uhr (180°) -->
+            <line x1="100" y1="176" x2="100" y2="188" stroke="var(--border)" stroke-width="2"/>
+            <text x="100" y="197" fill="var(--text-muted)" font-size="8" text-anchor="middle">180°</text>
+
+            <!-- Aktiver Bogen (vom 0° Punkt zum gewählten Winkel) -->
+            <path id="dial-arc" fill="none" stroke="var(--accent)" stroke-width="8" stroke-linecap="round" d=""/>
+
+            <!-- Zeigerlinie & Ziehgriff -->
+            <line id="dial-needle" x1="100" y1="100" x2="100" y2="20" stroke="var(--accent)" stroke-width="3" stroke-linecap="round"/>
+            <circle id="dial-knob" cx="100" cy="20" r="11" fill="var(--accent)" stroke="#fff" stroke-width="2"/>
+          </svg>
+        </div>
+        <div class="dial-value-badge" id="pan-badge">0° (Keine Drehung)</div>
+      </div>
+
+      <!-- Schnelltasten Pan -->
+      <div class="preset-group">
+        <div class="preset-label">Pan Schnelltasten</div>
+        <div class="preset-buttons">
+          <button type="button" class="ctrl-btn" onclick="addPanPreset(-180)">180° L</button>
+          <button type="button" class="ctrl-btn" onclick="addPanPreset(-90)">90° L</button>
+          <button type="button" class="ctrl-btn" onclick="addPanPreset(-45)">45° L</button>
+          <button type="button" class="ctrl-btn" onclick="addPanPreset(-15)">15° L</button>
+          <button type="button" class="ctrl-btn" onclick="addPanPreset(15)">15° R</button>
+          <button type="button" class="ctrl-btn" onclick="addPanPreset(45)">45° R</button>
+          <button type="button" class="ctrl-btn" onclick="addPanPreset(90)">90° R</button>
+          <button type="button" class="ctrl-btn" onclick="addPanPreset(180)">180° R</button>
+        </div>
+      </div>
+
+      <!-- Relativer Tilt-Slider -->
+      <div class="tilt-section">
+        <div class="tilt-header">
+          <span>Relativer Neigungswinkel</span>
+          <span class="tilt-val" id="tilt-badge">0° (Keine Neigung)</span>
+        </div>
+        <div class="tilt-slider-row">
+          <span>Hoch</span>
+          <input type="range" class="range-slider ctrl-btn" id="tilt-range" min="-60" max="60" value="0" step="1">
+          <span class="right">Runter</span>
+        </div>
+        <div class="preset-buttons">
+          <button type="button" class="ctrl-btn" onclick="setTiltPreset(-30)">30° hoch</button>
+          <button type="button" class="ctrl-btn" onclick="setTiltPreset(-15)">15° hoch</button>
+          <button type="button" class="ctrl-btn" onclick="setTiltPreset(15)">15° runter</button>
+          <button type="button" class="ctrl-btn" onclick="setTiltPreset(30)">30° runter</button>
+        </div>
+      </div>
+
+      <!-- Fahrtstatus-Box -->
+      <div id="ride-status" class="ride-status-box ride-status-idle">
+        Bereit für Fahrt
+      </div>
+
+      <!-- Ausführen & Zurücksetzen -->
+      <div class="exec-bar">
+        <button type="button" id="btn-exec" class="btn-primary ctrl-btn" onclick="executeTurn()">
+          <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+          <span>Fahrt ausführen</span>
+        </button>
+        <button type="button" id="btn-reset" class="ctrl-btn" onclick="resetDeltas()">
+          <span>Zurücksetzen</span>
+        </button>
+      </div>
+
+      <!-- Feinjustierung & Home (ausklappbar) -->
+      <details class="micro-ptz-details">
+        <summary>Feinjustierung per Pfeiltasten & Home</summary>
+        <div class="micro-ptz-body">
+          <div class="ptz-matrix">
+            <div></div>
+            <button type="button" class="ptz-btn ctrl-btn" onclick="sendMicroPtz('up')">▲</button>
+            <div></div>
+            <button type="button" class="ptz-btn ctrl-btn" onclick="sendMicroPtz('left')">◀</button>
+            <button type="button" class="ptz-btn ctrl-btn" onclick="sendMicroPtz('stop')">■</button>
+            <button type="button" class="ptz-btn ctrl-btn" onclick="sendMicroPtz('right')">▶</button>
+            <div></div>
+            <button type="button" class="ptz-btn ctrl-btn" onclick="sendMicroPtz('down')">▼</button>
+            <div></div>
+          </div>
+          <button type="button" class="ctrl-btn" onclick="sendMicroPtz('calibrate')" style="width:100%;">
+            <svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 13c0-4.42-3.58-8-8-8zm-6 8c0-1.01.25-1.97.7-2.8L5.24 8.74A7.93 7.93 0 0 0 4 13c0 4.42 3.58 8 8 8v4l5-5-5-5v4c-3.31 0-6-2.69-6-6z"/></svg>
+            <span>Home anfahren</span>
+          </button>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <!-- Systemstatus Card -->
+  <div class="card">
+    <div class="card-title">
+      <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14H6v-2h6v2zm4-4H6v-2h10v2zm0-4H6V7h10v2z"/></svg>
+      <span>Systemstatus</span>
+    </div>
+    <div class="status-grid">
+      <div class="status-item">
+        <span class="status-label">Freier RAM</span>
+        <span id="stat-ram" class="status-val">-- MB</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Uptime</span>
+        <span id="stat-uptime" class="status-val">--</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">WLAN-Signal</span>
+        <span id="stat-wifi" class="status-val">--</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">PTZ-Treiber</span>
+        <span id="stat-ptz" class="status-val">--</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">RTSP-Stream</span>
+        <span id="stat-rtsp" class="status-val">--</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast">Kopiert!</div>
+
+<script>
+// --- Globale Zustandsvariablen ---
+let currentDpan = 0;
+let currentDtilt = 0;
+let isBusy = false;
+let busyCountdownInterval = null;
+let pollTimeout = null;
+let lightState = false;
+
+const host = window.location.hostname || 'camera.local';
+document.getElementById('url-vs0').textContent = `rtsp://${host}:554/vs0`;
+document.getElementById('url-vs1').textContent = `rtsp://${host}:554/vs1`;
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+function copyTextLanSafe(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    return navigator.clipboard.writeText(text);
+  }
+  return new Promise((resolve, reject) => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    ok ? resolve() : reject(new Error('Copy failed'));
+  });
+}
+
+function copyRtsp(path) {
+  const url = `rtsp://${host}:554/${path}`;
+  copyTextLanSafe(url).then(() => showToast(`URL kopiert: ${path}`)).catch(() => showToast('Kopieren fehlgeschlagen'));
+}
+
+function downloadM3u(streamPaths) {
+  let content = '#EXTM3U\n';
+  for (const p of streamPaths) {
+    content += `#EXTINF:-1,Anyka Domecam (${p})\nrtsp://${host}:554/${p}\n`;
+  }
+  const blob = new Blob([content], { type: 'audio/x-mpegurl' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `anyka-cam.m3u`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+function formatUptime(s) {
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h ${m}m`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m ${s % 60}s`;
+}
+
+// --- Relativer Pan Drehkreis ---
+const dialSvg = document.getElementById('dial-svg');
+const dialArc = document.getElementById('dial-arc');
+const dialNeedle = document.getElementById('dial-needle');
+const dialKnob = document.getElementById('dial-knob');
+const panBadge = document.getElementById('pan-badge');
+let isDraggingDial = false;
+
+function updateDialUI(deg) {
+  currentDpan = deg;
+  if (deg === 0) {
+    panBadge.textContent = '0° (Keine Drehung)';
+  } else if (deg > 0) {
+    panBadge.textContent = `${deg}° rechts`;
+  } else {
+    panBadge.textContent = `${Math.abs(deg)}° links`;
+  }
+
+  // Koordinaten des Zeigers (Radius 80, Mittelpunkt 100, 100)
+  const rad = (deg * Math.PI) / 180;
+  const kx = 100 + 80 * Math.sin(rad);
+  const ky = 100 - 80 * Math.cos(rad);
+
+  dialNeedle.setAttribute('x2', kx.toFixed(1));
+  dialNeedle.setAttribute('y2', ky.toFixed(1));
+  dialKnob.setAttribute('cx', kx.toFixed(1));
+  dialKnob.setAttribute('cy', ky.toFixed(1));
+
+  // Kreisbogen von 12 Uhr (100, 20) bis (kx, ky)
+  if (deg === 0) {
+    dialArc.setAttribute('d', '');
+  } else {
+    const largeArcFlag = Math.abs(deg) > 180 ? 1 : 0;
+    const sweepFlag = deg > 0 ? 1 : 0;
+    dialArc.setAttribute('d', `M 100 20 A 80 80 0 ${largeArcFlag} ${sweepFlag} ${kx.toFixed(1)} ${ky.toFixed(1)}`);
+  }
+}
+
+function calcDialAngle(e) {
+  const rect = dialSvg.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  const dx = e.clientX - cx;
+  const dy = e.clientY - cy;
+
+  // 12 Uhr = dx=0, dy < 0
+  let deg = Math.round(Math.atan2(dx, -dy) * (180 / Math.PI));
+  if (deg < -180) deg = -180;
+  if (deg > 180) deg = 180;
+  return deg;
+}
+
+dialSvg.addEventListener('pointerdown', (e) => {
+  if (isBusy) return;
+  isDraggingDial = true;
+  dialSvg.setPointerCapture(e.pointerId);
+  updateDialUI(calcDialAngle(e));
+});
+
+dialSvg.addEventListener('pointermove', (e) => {
+  if (!isDraggingDial || isBusy) return;
+  updateDialUI(calcDialAngle(e));
+});
+
+function endDialDrag(e) {
+  if (!isDraggingDial) return;
+  isDraggingDial = false;
+  try { dialSvg.releasePointerCapture(e.pointerId); } catch (_) {}
+}
+
+dialSvg.addEventListener('pointerup', endDialDrag);
+dialSvg.addEventListener('pointercancel', endDialDrag);
+
+function addPanPreset(val) {
+  if (isBusy) return;
+  updateDialUI(val);
+}
+
+// --- Relativer Tilt Slider ---
+const tiltRange = document.getElementById('tilt-range');
+const tiltBadge = document.getElementById('tilt-badge');
+
+function updateTiltUI(val) {
+  currentDtilt = parseInt(val, 10);
+  tiltRange.value = currentDtilt;
+  if (currentDtilt === 0) {
+    tiltBadge.textContent = '0° (Keine Neigung)';
+  } else if (currentDtilt < 0) {
+    tiltBadge.textContent = `${Math.abs(currentDtilt)}° hoch`;
+  } else {
+    tiltBadge.textContent = `${currentDtilt}° runter`;
+  }
+}
+
+tiltRange.addEventListener('input', (e) => {
+  if (isBusy) return;
+  updateTiltUI(e.target.value);
+});
+
+function setTiltPreset(val) {
+  if (isBusy) return;
+  updateTiltUI(val);
+}
+
+function resetDeltas() {
+  if (isBusy) return;
+  updateDialUI(0);
+  updateTiltUI(0);
+  const statusBox = document.getElementById('ride-status');
+  statusBox.className = 'ride-status-box ride-status-idle';
+  statusBox.textContent = 'Bereit für Fahrt';
+}
+
+// --- Sperre / Busy Handling ---
+function setBusyState(busy, remainingSec, customMsg) {
+  isBusy = busy;
+  const statusBox = document.getElementById('ride-status');
+  const allBtns = document.querySelectorAll('.ctrl-btn');
+
+  allBtns.forEach(btn => {
+    btn.disabled = busy;
+  });
+
+  if (busyCountdownInterval) {
+    clearInterval(busyCountdownInterval);
+    busyCountdownInterval = null;
+  }
+
+  if (busy) {
+    let rem = remainingSec || 2;
+    statusBox.className = 'ride-status-box ride-status-busy';
+    statusBox.textContent = customMsg || `Fahrt läuft... (noch ${rem}s)`;
+
+    busyCountdownInterval = setInterval(() => {
+      rem -= 1;
+      if (rem <= 0) {
+        clearInterval(busyCountdownInterval);
+        busyCountdownInterval = null;
+        setBusyState(false);
+        statusBox.className = 'ride-status-box ride-status-done';
+        statusBox.textContent = 'Ziel erreicht';
+        setTimeout(() => {
+          if (!isBusy) {
+            statusBox.className = 'ride-status-box ride-status-idle';
+            statusBox.textContent = 'Bereit für Fahrt';
+          }
+        }, 2500);
+      } else {
+        statusBox.textContent = customMsg || `Fahrt läuft... (noch ${rem}s)`;
+      }
+    }, 1000);
+  }
+}
+
+// --- Ausführen ---
+function executeTurn() {
+  if (isBusy) return;
+  if (currentDpan === 0 && currentDtilt === 0) {
+    showToast('Bitte erst Winkel einstellen');
+    return;
+  }
+
+  const p = currentDpan;
+  const t = currentDtilt;
+  const statusBox = document.getElementById('ride-status');
+
+  // Vorab Busy anzeigen
+  setBusyState(true, 3, 'Befehl wird gesendet...');
+
+  fetch(`/cgi-bin/api.cgi?action=turn&dpan=${p}&dtilt=${t}`, { method: 'POST', body: '' })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        const busySec = Math.max(1, Math.ceil((data.busy_ms || 1800) / 1000));
+        let msg = `Fahrt läuft... (noch ${busySec}s)`;
+        if (data.clamped) {
+          msg = `Nur ${data.executed.dpan}°/${data.executed.dtilt}° möglich (Grenze) - noch ${busySec}s`;
+          statusBox.className = 'ride-status-box ride-status-clamped';
+        }
+        setBusyState(true, busySec, msg);
+        // Nach Ausführung springen Kreis und Slider auf 0
+        updateDialUI(0);
+        updateTiltUI(0);
+      } else {
+        setBusyState(false);
+        if (data.err === 'busy') {
+          setBusyState(true, data.busy_remaining_s || 2, `Kamera ist beschäftigt (noch ${data.busy_remaining_s}s)`);
+        } else if (data.err === 'ptz_invalid') {
+          statusBox.className = 'ride-status-box ride-status-err';
+          statusBox.textContent = 'Fehler: PTZ-Position ungültig';
+        } else {
+          statusBox.className = 'ride-status-box ride-status-err';
+          statusBox.textContent = `Fehler: ${data.err || 'Unbekannt'}`;
+        }
+      }
+    })
+    .catch(() => {
+      setBusyState(false);
+      statusBox.className = 'ride-status-box ride-status-err';
+      statusBox.textContent = 'Verbindungsfehler';
+    });
+}
+
+// --- Micro-PTZ (Pfeiltasten & Home) ---
+function sendMicroPtz(act) {
+  if (isBusy) return;
+  setBusyState(true, act === 'calibrate' ? 5 : 2);
+  fetch(`/cgi-bin/api.cgi?action=${act}`, { method: 'POST', body: '' })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok && data.err === 'busy') {
+        setBusyState(true, data.busy_remaining_s || 2);
+      }
+    })
+    .catch(() => {
+      setBusyState(false);
+    });
+}
+
+// --- Beleuchtung ---
+function toggleLight() {
+  lightState = !lightState;
+  const act = lightState ? 'light_on' : 'light_off';
+  fetch(`/cgi-bin/api.cgi?action=${act}`, { method: 'POST', body: '' })
+    .then(r => r.json())
+    .then(data => {
+      document.getElementById('btn-light').classList.toggle('btn-primary', lightState);
+      showToast(lightState ? 'LED an' : 'LED aus');
+    });
+}
+
+// --- Zentraler Status-Poll (EIN einzelner Loop) ---
+function pollStatus() {
+  if (document.hidden) return;
+  if (pollTimeout) clearTimeout(pollTimeout);
+
+  fetch('/cgi-bin/api.cgi?action=status')
+    .then(r => r.json())
+    .then(s => {
+      if (!s.ok) return;
+      document.getElementById('stat-ram').textContent = `${(s.avail_kb / 1024).toFixed(1)} MB`;
+      document.getElementById('stat-uptime').textContent = formatUptime(s.uptime_s);
+      document.getElementById('stat-wifi').textContent = s.wifi_dbm !== 'n/a' ? `${s.wifi_dbm} dBm` : `${s.wifi_link}`;
+      document.getElementById('stat-ptz').textContent = s.ptz_ready ? (s.busy ? 'Fahrt läuft' : 'Bereit') : 'Inaktiv';
+      document.getElementById('stat-rtsp').textContent = s.rtsp_ready ? 'Aktiv (554)' : 'Inaktiv';
+
+      // Externe Busy-Aktualisierung
+      if (s.busy && !isBusy) {
+        setBusyState(true, s.busy_remaining_s || 2);
+      }
+
+      const badge = document.getElementById('iso-badge');
+      if (s.lan_isolated) {
+        badge.className = 'badge badge-iso';
+        badge.textContent = 'LAN-ISOLIERT';
+      } else {
+        badge.className = 'badge badge-wan';
+        badge.textContent = 'GATEWAY AKTIV';
+      }
+    })
+    .catch(() => {})
+    .then(() => {
+      if (!document.hidden) {
+        pollTimeout = setTimeout(pollStatus, 4000);
+      }
+    });
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    if (pollTimeout) clearTimeout(pollTimeout);
+  } else {
+    pollStatus();
+  }
+});
+
+// Tastatursteuerung für Pfeiltasten
+document.addEventListener('keydown', (e) => {
+  if (/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
+  if (isBusy) return;
+  if (e.key === 'ArrowUp') { e.preventDefault(); sendMicroPtz('up'); }
+  else if (e.key === 'ArrowDown') { e.preventDefault(); sendMicroPtz('down'); }
+  else if (e.key === 'ArrowLeft') { e.preventDefault(); sendMicroPtz('left'); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); sendMicroPtz('right'); }
+  else if (e.key === ' ') { e.preventDefault(); sendMicroPtz('stop'); }
+});
+
+// Initialer Start
+pollStatus();
+updateDialUI(0);
+updateTiltUI(0);
+</script>
+</body>
+</html>

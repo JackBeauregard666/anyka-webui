@@ -1,0 +1,21 @@
+# Anyka Domecam WebUI .gitignore
+
+# Backups & verification logs
+backups/
+verify/
+*.log
+*.bak*
+
+# Upstream firmware clones & build artifacts
+src/Anyka-Camera-Firmware/
+build/
+
+# Python cache & artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Temporary / OS files
+.DS_Store
+Thumbs.db
+prompt.txt
