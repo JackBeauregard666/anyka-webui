@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ main, overhaul ]
 
+permissions:
+  contents: read
+
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -27,16 +30,19 @@ jobs:
 
       - name: ShellCheck
         run: |
+          # -S warning: nur Warnungen und Fehler brechen den Lauf ab (keine Stilhinweise)
           # SC2034: Unused vars intentional for configs
           # SC2086: Word splitting intentional for BusyBox params
           # SC2154: Vars assigned by environment in CGI
-          shellcheck -s sh -e SC2034,SC2086,SC2154 \
+          shellcheck -s sh -S warning -e SC2034,SC2086,SC2154 \
             bin/udhcpc_lanonly.sh \
             start_webui.sh \
             rtsp_supervisor.sh \
             webui/www/cgi-bin/api.cgi \
             tools/build_sd.sh \
-            tests/test_api.sh
+            tests/test_api.sh \
+            tests/test_start_webui.sh \
+            tests/test_supervisor.sh
 
       - name: Python Syntax Check
         run: |
@@ -56,5 +62,11 @@ jobs:
 
       - name: Run API Tests
         run: |
-          chmod +x webui/www/cgi-bin/api.cgi tests/test_api.sh
-          ./tests/test_api.sh
+          chmod +x webui/www/cgi-bin/api.cgi tests/*.sh
+          dash tests/test_api.sh
+
+      - name: Run start_webui.sh Tests
+        run: dash tests/test_start_webui.sh
+
+      - name: Run RTSP Supervisor Tests
+        run: dash tests/test_supervisor.sh
