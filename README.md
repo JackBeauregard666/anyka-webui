@@ -50,7 +50,7 @@ Die Tests und Messungen wurden auf folgendem Geraet durchgefuehrt:
 | **WLAN-Treiber** | `rtl8188fu.ko` (Realtek RTL8188FU USB) |
 | **Kernel / C-Library**| Linux 3.4.35 / uClibc 0.9.33.2 |
 | **Upstream-Basis** | [MuhammedKalkan/Anyka-Camera-Firmware](https://github.com/MuhammedKalkan/Anyka-Camera-Firmware), Commit `823cb55` |
-| **Testdatum** | 26. Oktober 2026 |
+| **Testdatum** | 26. Oktober 2026 (Messwerte), 27. Oktober 2026 (Einspielen von Revision 2, zwei Kaltstarts, PTZ-Richtungen) |
 
 *Andere Hardware-Revisionen, Sensoren oder WLAN-Chipsaetze sind ungetestet.*
 
@@ -58,14 +58,14 @@ Die Tests und Messungen wurden auf folgendem Geraet durchgefuehrt:
 
 ## 4. Messwerte
 
-Die folgenden Werte wurden am 26. Oktober 2026 auf dem Testsystem erhoben:
+Die folgenden Werte wurden am 26. Oktober 2026 auf dem Testsystem erhoben. Systemstart und Arbeitsspeicher wurden am 27. Oktober 2026 nach dem Einspielen von Revision 2 in zwei Kaltstarts erneut gemessen; Streams, API-Antwortzeiten und Drehgeschwindigkeit wurden dabei nicht neu gemessen.
 
 ### Video-Streams (gemessen per ffprobe ueber RTSP Port 554)
-- **Hauptstream (`/vs0`):** Auflosung 1280x720 Pixel (720p), 25,0 FPS, Codec H.264.
-- **Substream (`/vs1`):** Auflosung 640x480 Pixel (VGA), 25,0 FPS, Codec H.264.
+- **Hauptstream (`/vs0`):** Aufloesung 1280x720 Pixel (720p), 25,0 FPS, Codec H.264.
+- **Substream (`/vs1`):** Aufloesung 640x480 Pixel (VGA), 25,0 FPS, Codec H.264.
 
 ### Arbeitsspeicher (gemessen per status-API / /proc/meminfo)
-- **Verfuegbarer RAM:** 23,1 MB bis 24,5 MB (aus MemFree + Buffers + Cached - Shmem, von 64 MB physischem RAM abzg. ISP-Reservierung).
+- **Verfuegbarer RAM:** 23,1 MB bis 24,5 MB am 26.10.; 23,0 MB bis 24,7 MB am 27.10. bei laufendem RTSP (Feld `avail_kb`, aus MemFree + Buffers + Cached - Shmem, von 64 MB physischem RAM abzg. ISP-Reservierung).
 
 ### API-Antwortzeiten (20 aufeinanderfolgende Abfragen ueber WLAN)
 - `GET /cgi-bin/api.cgi?action=status`:
@@ -79,13 +79,14 @@ Die folgenden Werte wurden am 26. Oktober 2026 auf dem Testsystem erhoben:
   - Durchschnitt: 106,3 ms
   - 95. Perzentil (p95): 149,3 ms
 
-### Systemstart (gemessen an /mnt/anyka_webui/boot.log)
+### Systemstart (gemessen an `boot.log` und `rtsp_supervisor.log`, zwei Kaltstarts am 27.10., beide identisch)
 - `0 s`: Kernel-Initialisierung
 - `7 s`: Start von `start_webui.sh`, Web-Verzeichnis nach `/tmp/www` gespiegelt
-- `35 s`: WLAN-Verbindung steht (IP-Zuweisung abgeschlossen)
-- `35 s`: Default-Gateway geloescht, DNS geleert, LAN-only aktiv
-- `35 s`: `ptz_daemon` und `httpd` gestartet
-- `37 s`: `rtsp_supervisor.sh` beendet `anyka_ipc` und startet RTSP-Daemon
+- `35 s`: WLAN-Verbindung steht (IP-Zuweisung abgeschlossen); `Default-Route vor der Isolation: JA`
+- `35 s`: Default-Gateway geloescht, DHCP-Skript ersetzt, DNS geleert, LAN-only aktiv
+- `35 s`: `ptz_daemon`, `httpd` und `rtsp_supervisor.sh` gestartet
+- `36 s`: `rtsp_supervisor.sh` beendet `anyka_ipc` (Dauer 5 s)
+- `43 s`: RTSP-Daemon gestartet, Port 554 lauscht; der Health-Check endet nach 45 s ohne Befund
 
 ### Drehgeschwindigkeit der Motoren
 - **Pan / Tilt:** ca. 25 Grad pro Sekunde (1 Rohwert entspricht ca. 1,0 Grad physikalischer Drehung).
@@ -108,7 +109,7 @@ Ausfuehrliche Schritte, Pruefsummen und Vorlagen sind in [docs/INSTALLATION.md](
 
 Die Netzwerk-Isolation basiert auf technischem Routing und stellt keine absolute Sicherheitsgarantie dar:
 
-1. **Zeitfenster beim Systemstart:** Waehrend der ersten ca. 35 Sekunden nach dem Einschalten laeuft der Werks-Daemon `anyka_ipc` mit aktiver Internetverbindung und gueltigem Standard-Gateway, um die WLAN-Verbindung herzustellen. Erst nach Zuweisung der IP-Adresse entfernt `start_webui.sh` die Standard-Route. Optional kann dieses Fenster verkleinert werden: Mit einer Datei `EARLY_ISOLATION` im Wurzelverzeichnis der SD-Karte wird das DHCP-Skript schon vor dem ersten Lease ersetzt. Das ist **standardmaessig aus** und noch nicht durch einen Kaltstart auf der Kamera bestaetigt (Pruefschritte in [docs/INSTALLATION.md](docs/INSTALLATION.md)). Ob es das Fenster in der Praxis schliesst, zeigt die Zeile `Default-Route vor der Isolation` in `boot.log`.
+1. **Zeitfenster beim Systemstart:** Waehrend der ersten ca. 35 Sekunden nach dem Einschalten laeuft der Werks-Daemon `anyka_ipc` mit aktiver Internetverbindung und gueltigem Standard-Gateway, um die WLAN-Verbindung herzustellen. Erst nach Zuweisung der IP-Adresse entfernt `start_webui.sh` die Standard-Route. Optional kann dieses Fenster verkleinert werden: Mit einer Datei `EARLY_ISOLATION` im Wurzelverzeichnis der SD-Karte wird das DHCP-Skript schon vor dem ersten Lease ersetzt. Gemessen am 27.10. ohne diese Option: In beiden Kaltstarts meldete `boot.log` `Default-Route vor der Isolation: JA`, das Fenster existiert also. `EARLY_ISOLATION` ist **standardmaessig aus** und noch nicht durch einen Kaltstart auf der Kamera bestaetigt (Pruefschritte in [docs/INSTALLATION.md](docs/INSTALLATION.md)). Ob es das Fenster in der Praxis schliesst, zeigt die Zeile `Default-Route vor der Isolation` in `boot.log`.
 2. **Fehlende Authentifizierung:** Die auf der Kamera laufenden Dienste (Telnet mit Root-Shell, FTP, RTSP und der Webserver) besitzen standardmaessig keinen Kennwortschutz.
 3. **Keine Portweiterleitung:** Die Kamera darf unter keinen Umstaenden per Port-Forwarding aus dem Internet erreichbar gemacht werden. Sie gehoert in ein dediziertes, isoliertes Netzwerksegment (z. B. IoT-VLAN).
 4. **Empfohlene Routersperre:** Es wird dringend empfohlen, dem Geraet im heimischen Router (z. B. AVM FRITZ!Box ueber das Zugangsprofil "Gesperrt") saemtliche Internetverbindungen zusaetzlich auf Infrastrukturebene zu sperren.
