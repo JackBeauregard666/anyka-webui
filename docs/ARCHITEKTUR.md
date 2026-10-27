@@ -38,6 +38,7 @@ Mit der optionalen Datei `EARLY_ISOLATION` auf der SD-Karte wird der Bind-Mount 
 - Die Benutzeroberflaeche und die API operieren ausschliesslich relativ zur aktuellen Blickrichtung:
   - $\Delta\text{pan} \in [-180, +180]$ (groesser = rechts, kleiner = links).
   - $\Delta\text{tilt} \in [-60, +60]$ (groesser = runter, kleiner = hoch).
+  - Die Drehrichtungen sind an der Kamera belegt (27.10.2026, Bedienung ueber die WebUI mit Kontrolle im Video): "rechts"/"links" und "hoch"/"runter" der Oberflaeche entsprechen der tatsaechlichen Bewegung. Die Angaben zu Einheit und Geschwindigkeit unten wurden dabei nicht erneut gemessen.
 - `api.cgi` fuehrt die Berechnung aus:
   $$\text{Ziel-Pan} = \text{Ist-Pan} + \Delta\text{pan}, \quad \text{Ziel-Tilt} = \text{Ist-Tilt} + \Delta\text{tilt}$$
 - Zielwerte werden an den Software-Grenzen geklemmt (bezogen auf den `ptz.ini`-Zaehlerstand, siehe 2.2):

@@ -12,7 +12,7 @@ It provides relative PTZ movement via browser, native RTSP streaming links, and 
 ## 1. Was das Projekt tut und was nicht
 
 ### Das Projekt bietet:
-- **Relative PTZ-Steuerung:** Bedienung ueber einen visuellen Kreis in der Weboberflaeche und per HTTP-POST-API. Drehungen erfolgen relativ zur aktuellen Ausrichtung ("um X Grad nach links/rechts/oben/unten").
+- **Relative PTZ-Steuerung:** Bedienung ueber einen visuellen Kreis in der Weboberflaeche und per HTTP-POST-API. Drehungen erfolgen relativ zur aktuellen Ausrichtung ("um X Grad nach links/rechts/oben/unten"). Die Drehrichtungen der Oberflaeche sind an der Kamera geprueft und stimmen mit der tatsaechlichen Bewegung ueberein.
 - **RTSP-Streaming-Adressen:** Anzeige der RTSP-URLs fuer Haupt- und Substream zur Einbindung in externe Player (z. B. VLC) oder Smart-Home-Systeme (z. B. Home Assistant), inklusive M3U-Download.
 - **LAN-Isolation:** Automatisches Entfernen des Standard-Gateways und Leeren der DNS-Konfiguration nach dem Systemstart, um ausgehende WAN- und Cloud-Verbindungen auf Netzwerkebene zu unterbinden.
 - **Systemstatus:** Abfrage von Uptime, freiem Arbeitsspeicher, WLAN-Signalstaerke und Prozesszustaenden.

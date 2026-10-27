@@ -171,6 +171,8 @@ curl -s -X POST -H "Content-Type: application/json" -e "http://$CAM/" "http://$C
 ```
 Erwartung: Status mit `"ok":true`, `"ptz_ready":1`, `"rtsp_ready":1`, `"lan_isolated":true` und dem Feld `led_on`; der Trockenlauf liefert `"dry":true` ohne Bewegung. Negativtests: derselbe POST ohne `-e` liefert `bad_referer`, `action=calibrate` liefert `invalid_action`.
 
+**Danach im Browser hart neu laden** (Strg+Umschalt+R, auf dem Handy Websitedaten loeschen oder privates Fenster). Sonst laeuft die alte `index.html` aus dem Browser-Cache gegen die neue `api.cgi` weiter; Fahrten scheitern dann mit `bad_content_type`, weil die alte Seite keinen Content-Type `application/json` sendet. Erkennbar ist die alte Seite z. B. an der Home-Schaltflaeche.
+
 Ist `ptz_ready` 0, obwohl `ptz_daemon` laeuft, hat der Prozess in `/proc/<pid>/stat` moeglicherweise einen anderen Namen. Dann die alte `api.cgi` aus dem Backup nach `/tmp/www/cgi-bin/` zurueckkopieren und die Ausgabe von `cat /proc/$(pidof ptz_daemon)/stat` auswerten.
 
 ### 6.3 Stufe B: Start-Skripte und Supervisor (Neustart noetig)
