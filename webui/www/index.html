@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="referrer" content="same-origin">
 <title>Anyka Domecam WebUI</title>
 <style>
 :root {
@@ -61,14 +62,38 @@ header {
 }
 .badge-iso { background: rgba(16, 185, 129, 0.2); color: var(--success); border: 1px solid var(--success); }
 .badge-wan { background: rgba(245, 158, 11, 0.2); color: var(--warning); border: 1px solid var(--warning); }
+
+.permanent-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid var(--warning);
+  color: var(--warning);
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+.permanent-banner svg { width: 20px; height: 20px; flex-shrink: 0; fill: currentColor; }
+
+/* Grid Layout mit Mobil-Prioritaet fuer PTZ */
 .grid {
-  display: grid;
-  grid-template-columns: 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 16px;
 }
+.card-ptz { order: 1; }
+.card-rtsp { order: 2; }
 @media (min-width: 768px) {
-  .grid { grid-template-columns: 3fr 2fr; }
+  .grid {
+    display: grid;
+    grid-template-columns: 3fr 2fr;
+  }
+  .card-rtsp { order: 1; }
+  .card-ptz { order: 2; }
 }
+
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -89,20 +114,6 @@ header {
   gap: 8px;
 }
 .card-title svg { width: 16px; height: 16px; fill: currentColor; }
-
-.permanent-banner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: rgba(245, 158, 11, 0.12);
-  border: 1px solid var(--warning);
-  color: var(--warning);
-  padding: 10px 14px;
-  border-radius: var(--radius);
-  font-size: 0.85rem;
-  line-height: 1.4;
-}
-.permanent-banner svg { width: 20px; height: 20px; flex-shrink: 0; fill: currentColor; }
 
 /* RTSP Box */
 .rtsp-box {
@@ -141,6 +152,10 @@ header {
   white-space: nowrap;
   color: var(--accent);
 }
+@media (max-width: 480px) {
+  /* Schmale Displays: URL umbrechen statt abschneiden, sonst ist vs0/vs1 nicht lesbar */
+  .rtsp-url { white-space: normal; word-break: break-all; }
+}
 
 /* Buttons */
 button {
@@ -171,18 +186,18 @@ button.btn-primary {
 button.btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
 button svg { width: 14px; height: 14px; fill: currentColor; }
 
-/* Relative PTZ Dial */
+/* Relativer PTZ Drehkreis */
 .dial-container {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  padding: 6px 0;
+  gap: 10px;
+  padding: 4px 0;
 }
 .dial-wrapper {
   position: relative;
-  width: 220px;
-  height: 220px;
+  width: 240px;
+  height: 240px;
   touch-action: none;
   user-select: none;
 }
@@ -287,7 +302,7 @@ button svg { width: 14px; height: 14px; fill: currentColor; }
   cursor: pointer;
 }
 
-/* Feedback / Status */
+/* Fahrtstatus */
 .ride-status-box {
   min-height: 40px;
   display: flex;
@@ -302,7 +317,7 @@ button svg { width: 14px; height: 14px; fill: currentColor; }
 }
 .ride-status-idle { color: var(--text-muted); background: transparent; }
 .ride-status-busy { color: var(--warning); background: rgba(245, 158, 11, 0.15); border: 1px solid var(--warning); }
-.ride-status-clamped { color: var(--warning); background: rgba(245, 158, 11, 0.2); border: 1px solid var(--warning); }
+.ride-status-clamped { color: var(--warning); background: rgba(245, 158, 11, 0.25); border: 1px solid var(--warning); }
 .ride-status-done { color: var(--success); background: rgba(16, 185, 129, 0.15); border: 1px solid var(--success); }
 .ride-status-err { color: var(--danger); background: rgba(239, 68, 68, 0.15); border: 1px solid var(--danger); }
 
@@ -337,15 +352,52 @@ button svg { width: 14px; height: 14px; fill: currentColor; }
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 6px;
-  max-width: 200px;
+  max-width: 180px;
   margin: 0 auto;
   width: 100%;
 }
 .ptz-btn {
   aspect-ratio: 1;
-  font-size: 1.1rem;
-  font-weight: bold;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
+.ptz-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+/* Opt-in Tastatursteuerung */
+.opt-in-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  padding: 4px 0;
+  border-top: 1px solid var(--border);
+  margin-top: 6px;
+}
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 38px;
+  height: 22px;
+}
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider {
+  position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+  background-color: var(--surface-2);
+  border: 1px solid var(--border);
+  transition: .2s; border-radius: 22px;
+}
+.slider:before {
+  position: absolute; content: ""; height: 16px; width: 16px; left: 2px; bottom: 2px;
+  background-color: var(--text-muted); transition: .2s; border-radius: 50%;
+}
+input:checked + .slider { background-color: var(--accent); border-color: var(--accent); }
+input:checked + .slider:before { transform: translateX(16px); background-color: #fff; }
 
 /* System Status Grid */
 .status-grid {
@@ -401,48 +453,14 @@ button svg { width: 14px; height: 14px; fill: currentColor; }
     </div>
   </header>
 
-  <!-- Dauerhafter Hinweis nach Anforderung -->
   <div class="permanent-banner">
     <svg viewBox="0 0 24 24"><path d="M11 15h2v2h-2zm0-8h2v6h-2zm1-5C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>
-    <span>Bewegungen sind relativ. Nach einem Neustart ist die Blickrichtung zufällig.</span>
+    <span>Alle Bewegungen sind relativ zur aktuellen Blickrichtung. Nach einem Neustart zeigt die Kamera in eine zufällige Richtung; die Grenzen sind Software-Grenzen und stimmen nicht exakt mit den mechanischen Anschlägen überein.</span>
   </div>
 
   <div class="grid">
-    <!-- RTSP Streaming Box (ersetzt Live-Vorschau) -->
-    <div class="card">
-      <div class="card-title">
-        <svg viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12z"/></svg>
-        <span>RTSP-Stream Integration</span>
-      </div>
-      <p style="font-size:0.85rem; color:var(--text-muted);">
-        Live-Video wird mit 25 FPS über RTSP (Port 554) übertragen. Nutze VLC, Home Assistant oder einen RTSP-Client deiner Wahl.
-      </p>
-      <div class="rtsp-box">
-        <div class="rtsp-row">
-          <div class="rtsp-info">
-            <span class="rtsp-label">Main Stream (HD 1080p)</span>
-            <span id="url-vs0" class="rtsp-url">rtsp://.../vs0</span>
-          </div>
-          <button onclick="copyRtsp('vs0')">Kopieren</button>
-        </div>
-        <div class="rtsp-row">
-          <div class="rtsp-info">
-            <span class="rtsp-label">Sub Stream (480p)</span>
-            <span id="url-vs1" class="rtsp-url">rtsp://.../vs1</span>
-          </div>
-          <button onclick="copyRtsp('vs1')">Kopieren</button>
-        </div>
-        <div style="display:flex; justify-content: flex-end; margin-top:4px;">
-          <button onclick="downloadM3u(['vs0','vs1'])" class="btn-primary">
-            <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
-            <span>VLC Playlist (.m3u) herunterladen</span>
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Relative PTZ Steuerung -->
-    <div class="card">
+    <!-- PTZ-Steuerung (auf Mobilgeraeten oben) -->
+    <div class="card card-ptz">
       <div class="card-title">
         <svg viewBox="0 0 24 24"><path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/></svg>
         <span>Relative PTZ-Steuerung</span>
@@ -451,28 +469,28 @@ button svg { width: 14px; height: 14px; fill: currentColor; }
       <!-- Relativer Drehkreis -->
       <div class="dial-container">
         <div class="dial-wrapper" id="dial-wrap">
-          <svg class="dial-svg" id="dial-svg" viewBox="0 0 200 200">
+          <svg class="dial-svg" id="dial-svg" viewBox="0 0 240 240">
             <!-- Kreis-Hintergrund -->
-            <circle cx="100" cy="100" r="80" fill="none" stroke="var(--border)" stroke-width="8"/>
+            <circle cx="120" cy="120" r="75" fill="none" stroke="var(--border)" stroke-width="8"/>
             <!-- 12-Uhr Markierung (Jetzt / 0°) -->
-            <line x1="100" y1="12" x2="100" y2="24" stroke="var(--text-muted)" stroke-width="2"/>
-            <text x="100" y="8" fill="var(--text-muted)" font-size="9" text-anchor="middle" font-weight="bold">JETZT (0°)</text>
+            <line x1="120" y1="36" x2="120" y2="48" stroke="var(--text-muted)" stroke-width="2"/>
+            <text x="120" y="24" fill="var(--text-muted)" font-size="10" text-anchor="middle" font-weight="bold">JETZT (0°)</text>
             <!-- 3-Uhr (90° R) -->
-            <line x1="176" y1="100" x2="188" y2="100" stroke="var(--border)" stroke-width="2"/>
-            <text x="195" y="103" fill="var(--text-muted)" font-size="8" text-anchor="start">90°R</text>
+            <line x1="192" y1="120" x2="204" y2="120" stroke="var(--border)" stroke-width="2"/>
+            <text x="222" y="124" fill="var(--text-muted)" font-size="9" text-anchor="middle">90°R</text>
             <!-- 9-Uhr (90° L) -->
-            <line x1="12" y1="100" x2="24" y2="100" stroke="var(--border)" stroke-width="2"/>
-            <text x="5" y="103" fill="var(--text-muted)" font-size="8" text-anchor="end">90°L</text>
+            <line x1="36" y1="120" x2="48" y2="120" stroke="var(--border)" stroke-width="2"/>
+            <text x="18" y="124" fill="var(--text-muted)" font-size="9" text-anchor="middle">90°L</text>
             <!-- 6-Uhr (180°) -->
-            <line x1="100" y1="176" x2="100" y2="188" stroke="var(--border)" stroke-width="2"/>
-            <text x="100" y="197" fill="var(--text-muted)" font-size="8" text-anchor="middle">180°</text>
+            <line x1="120" y1="192" x2="120" y2="204" stroke="var(--border)" stroke-width="2"/>
+            <text x="120" y="222" fill="var(--text-muted)" font-size="9" text-anchor="middle">180°</text>
 
-            <!-- Aktiver Bogen (vom 0° Punkt zum gewählten Winkel) -->
+            <!-- Aktiver Bogen -->
             <path id="dial-arc" fill="none" stroke="var(--accent)" stroke-width="8" stroke-linecap="round" d=""/>
 
             <!-- Zeigerlinie & Ziehgriff -->
-            <line id="dial-needle" x1="100" y1="100" x2="100" y2="20" stroke="var(--accent)" stroke-width="3" stroke-linecap="round"/>
-            <circle id="dial-knob" cx="100" cy="20" r="11" fill="var(--accent)" stroke="#fff" stroke-width="2"/>
+            <line id="dial-needle" x1="120" y1="120" x2="120" y2="45" stroke="var(--accent)" stroke-width="3" stroke-linecap="round"/>
+            <circle id="dial-knob" cx="120" cy="45" r="10" fill="var(--accent)" stroke="#fff" stroke-width="2"/>
           </svg>
         </div>
         <div class="dial-value-badge" id="pan-badge">0° (Keine Drehung)</div>
@@ -482,14 +500,14 @@ button svg { width: 14px; height: 14px; fill: currentColor; }
       <div class="preset-group">
         <div class="preset-label">Pan Schnelltasten</div>
         <div class="preset-buttons">
-          <button type="button" class="ctrl-btn" onclick="addPanPreset(-180)">180° L</button>
-          <button type="button" class="ctrl-btn" onclick="addPanPreset(-90)">90° L</button>
-          <button type="button" class="ctrl-btn" onclick="addPanPreset(-45)">45° L</button>
-          <button type="button" class="ctrl-btn" onclick="addPanPreset(-15)">15° L</button>
-          <button type="button" class="ctrl-btn" onclick="addPanPreset(15)">15° R</button>
-          <button type="button" class="ctrl-btn" onclick="addPanPreset(45)">45° R</button>
-          <button type="button" class="ctrl-btn" onclick="addPanPreset(90)">90° R</button>
-          <button type="button" class="ctrl-btn" onclick="addPanPreset(180)">180° R</button>
+          <button type="button" class="ctrl-btn" onclick="setPanPreset(-180)">180° L</button>
+          <button type="button" class="ctrl-btn" onclick="setPanPreset(-90)">90° L</button>
+          <button type="button" class="ctrl-btn" onclick="setPanPreset(-45)">45° L</button>
+          <button type="button" class="ctrl-btn" onclick="setPanPreset(-15)">15° L</button>
+          <button type="button" class="ctrl-btn" onclick="setPanPreset(15)">15° R</button>
+          <button type="button" class="ctrl-btn" onclick="setPanPreset(45)">45° R</button>
+          <button type="button" class="ctrl-btn" onclick="setPanPreset(90)">90° R</button>
+          <button type="button" class="ctrl-btn" onclick="setPanPreset(180)">180° R</button>
         </div>
       </div>
 
@@ -517,7 +535,7 @@ button svg { width: 14px; height: 14px; fill: currentColor; }
         Bereit für Fahrt
       </div>
 
-      <!-- Ausführen & Zurücksetzen -->
+      <!-- Ausfuehren & Zuruecksetzen -->
       <div class="exec-bar">
         <button type="button" id="btn-exec" class="btn-primary ctrl-btn" onclick="executeTurn()">
           <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
@@ -528,27 +546,71 @@ button svg { width: 14px; height: 14px; fill: currentColor; }
         </button>
       </div>
 
-      <!-- Feinjustierung & Home (ausklappbar) -->
+      <!-- Feinjustierung per Einzelschritt -->
       <details class="micro-ptz-details">
-        <summary>Feinjustierung per Pfeiltasten & Home</summary>
+        <summary>Feinjustierung per Einzelschritt</summary>
         <div class="micro-ptz-body">
           <div class="ptz-matrix">
             <div></div>
-            <button type="button" class="ptz-btn ctrl-btn" onclick="sendMicroPtz('up')">▲</button>
+            <button type="button" class="ptz-btn ctrl-btn" onclick="sendMicroPtz('up')" title="Hoch">
+              <svg viewBox="0 0 24 24"><path d="M12 8l-6 6 1.41 1.41L12 10.83l4.59 4.58L18 14z"/></svg>
+            </button>
             <div></div>
-            <button type="button" class="ptz-btn ctrl-btn" onclick="sendMicroPtz('left')">◀</button>
-            <button type="button" class="ptz-btn ctrl-btn" onclick="sendMicroPtz('stop')">■</button>
-            <button type="button" class="ptz-btn ctrl-btn" onclick="sendMicroPtz('right')">▶</button>
+            <button type="button" class="ptz-btn ctrl-btn" onclick="sendMicroPtz('left')" title="Links">
+              <svg viewBox="0 0 24 24"><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6z"/></svg>
+            </button>
             <div></div>
-            <button type="button" class="ptz-btn ctrl-btn" onclick="sendMicroPtz('down')">▼</button>
+            <button type="button" class="ptz-btn ctrl-btn" onclick="sendMicroPtz('right')" title="Rechts">
+              <svg viewBox="0 0 24 24"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>
+            </button>
+            <div></div>
+            <button type="button" class="ptz-btn ctrl-btn" onclick="sendMicroPtz('down')" title="Runter">
+              <svg viewBox="0 0 24 24"><path d="M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z"/></svg>
+            </button>
             <div></div>
           </div>
-          <button type="button" class="ctrl-btn" onclick="sendMicroPtz('calibrate')" style="width:100%;">
-            <svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 13c0-4.42-3.58-8-8-8zm-6 8c0-1.01.25-1.97.7-2.8L5.24 8.74A7.93 7.93 0 0 0 4 13c0 4.42 3.58 8 8 8v4l5-5-5-5v4c-3.31 0-6-2.69-6-6z"/></svg>
-            <span>Home anfahren</span>
-          </button>
+          <div class="opt-in-row">
+            <span>Tastatursteuerung aktiv (Pfeiltasten)</span>
+            <label class="switch">
+              <input type="checkbox" id="chk-keyboard" onchange="setKeyboardControl(this.checked)">
+              <span class="slider"></span>
+            </label>
+          </div>
         </div>
       </details>
+    </div>
+
+    <!-- RTSP Streaming Box -->
+    <div class="card card-rtsp">
+      <div class="card-title">
+        <svg viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12z"/></svg>
+        <span>RTSP-Stream Integration</span>
+      </div>
+      <p style="font-size:0.85rem; color:var(--text-muted);">
+        Live-Video wird mit 25 FPS über RTSP (Port 554) übertragen.
+      </p>
+      <div class="rtsp-box">
+        <div class="rtsp-row">
+          <div class="rtsp-info">
+            <span class="rtsp-label">Main Stream (1280x720, 25 FPS)</span>
+            <span id="url-vs0" class="rtsp-url">rtsp://.../vs0</span>
+          </div>
+          <button onclick="copyRtsp('vs0')">Kopieren</button>
+        </div>
+        <div class="rtsp-row">
+          <div class="rtsp-info">
+            <span class="rtsp-label">Sub Stream (640x480, 25 FPS)</span>
+            <span id="url-vs1" class="rtsp-url">rtsp://.../vs1</span>
+          </div>
+          <button onclick="copyRtsp('vs1')">Kopieren</button>
+        </div>
+        <div style="display:flex; justify-content: flex-end; margin-top:4px;">
+          <button onclick="downloadM3u(['vs0','vs1'])" class="btn-primary">
+            <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+            <span>VLC Playlist (.m3u) herunterladen</span>
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -586,13 +648,29 @@ button svg { width: 14px; height: 14px; fill: currentColor; }
 <div id="toast" class="toast">Kopiert!</div>
 
 <script>
-// --- Globale Zustandsvariablen ---
+// --- Globale Zustaende ---
 let currentDpan = 0;
 let currentDtilt = 0;
 let isBusy = false;
 let busyCountdownInterval = null;
 let pollTimeout = null;
 let lightState = false;
+let lastClampedMessage = null;
+
+let keyboardControlEnabled = false;
+try {
+  keyboardControlEnabled = localStorage.getItem('ptz_keyboard') === 'true';
+} catch (_) {}
+
+const chkKeyboard = document.getElementById('chk-keyboard');
+if (chkKeyboard) chkKeyboard.checked = keyboardControlEnabled;
+
+function setKeyboardControl(val) {
+  keyboardControlEnabled = !!val;
+  try {
+    localStorage.setItem('ptz_keyboard', keyboardControlEnabled ? 'true' : 'false');
+  } catch (_) {}
+}
 
 const host = window.location.hostname || 'camera.local';
 document.getElementById('url-vs0').textContent = `rtsp://${host}:554/vs0`;
@@ -650,7 +728,7 @@ function formatUptime(s) {
   return `${m}m ${s % 60}s`;
 }
 
-// --- Relativer Pan Drehkreis ---
+// --- Relativer Pan Drehkreis (Center 120, 120, Radius 75) ---
 const dialSvg = document.getElementById('dial-svg');
 const dialArc = document.getElementById('dial-arc');
 const dialNeedle = document.getElementById('dial-needle');
@@ -668,23 +746,21 @@ function updateDialUI(deg) {
     panBadge.textContent = `${Math.abs(deg)}° links`;
   }
 
-  // Koordinaten des Zeigers (Radius 80, Mittelpunkt 100, 100)
   const rad = (deg * Math.PI) / 180;
-  const kx = 100 + 80 * Math.sin(rad);
-  const ky = 100 - 80 * Math.cos(rad);
+  const kx = 120 + 75 * Math.sin(rad);
+  const ky = 120 - 75 * Math.cos(rad);
 
   dialNeedle.setAttribute('x2', kx.toFixed(1));
   dialNeedle.setAttribute('y2', ky.toFixed(1));
   dialKnob.setAttribute('cx', kx.toFixed(1));
   dialKnob.setAttribute('cy', ky.toFixed(1));
 
-  // Kreisbogen von 12 Uhr (100, 20) bis (kx, ky)
   if (deg === 0) {
     dialArc.setAttribute('d', '');
   } else {
     const largeArcFlag = Math.abs(deg) > 180 ? 1 : 0;
     const sweepFlag = deg > 0 ? 1 : 0;
-    dialArc.setAttribute('d', `M 100 20 A 80 80 0 ${largeArcFlag} ${sweepFlag} ${kx.toFixed(1)} ${ky.toFixed(1)}`);
+    dialArc.setAttribute('d', `M 120 45 A 75 75 0 ${largeArcFlag} ${sweepFlag} ${kx.toFixed(1)} ${ky.toFixed(1)}`);
   }
 }
 
@@ -695,7 +771,6 @@ function calcDialAngle(e) {
   const dx = e.clientX - cx;
   const dy = e.clientY - cy;
 
-  // 12 Uhr = dx=0, dy < 0
   let deg = Math.round(Math.atan2(dx, -dy) * (180 / Math.PI));
   if (deg < -180) deg = -180;
   if (deg > 180) deg = 180;
@@ -723,7 +798,7 @@ function endDialDrag(e) {
 dialSvg.addEventListener('pointerup', endDialDrag);
 dialSvg.addEventListener('pointercancel', endDialDrag);
 
-function addPanPreset(val) {
+function setPanPreset(val) {
   if (isBusy) return;
   updateDialUI(val);
 }
@@ -756,6 +831,7 @@ function setTiltPreset(val) {
 
 function resetDeltas() {
   if (isBusy) return;
+  lastClampedMessage = null;
   updateDialUI(0);
   updateTiltUI(0);
   const statusBox = document.getElementById('ride-status');
@@ -789,22 +865,48 @@ function setBusyState(busy, remainingSec, customMsg) {
         clearInterval(busyCountdownInterval);
         busyCountdownInterval = null;
         setBusyState(false);
-        statusBox.className = 'ride-status-box ride-status-done';
-        statusBox.textContent = 'Ziel erreicht';
-        setTimeout(() => {
-          if (!isBusy) {
-            statusBox.className = 'ride-status-box ride-status-idle';
-            statusBox.textContent = 'Bereit für Fahrt';
-          }
-        }, 2500);
+        if (lastClampedMessage) {
+          statusBox.className = 'ride-status-box ride-status-clamped';
+          statusBox.textContent = `Fahrt beendet (${lastClampedMessage})`;
+        } else {
+          statusBox.className = 'ride-status-box ride-status-done';
+          statusBox.textContent = 'Fahrt beendet';
+          setTimeout(() => {
+            if (!isBusy && !lastClampedMessage) {
+              statusBox.className = 'ride-status-box ride-status-idle';
+              statusBox.textContent = 'Bereit für Fahrt';
+            }
+          }, 2500);
+        }
       } else {
-        statusBox.textContent = customMsg || `Fahrt läuft... (noch ${rem}s)`;
+        const extra = lastClampedMessage ? ` (${lastClampedMessage})` : '';
+        statusBox.textContent = `Fahrt läuft... (noch ${rem}s)${extra}`;
       }
     }, 1000);
   }
 }
 
-// --- Ausführen ---
+// --- Fehlertexte ---
+const ERR_TEXT = {
+  ptz_invalid: 'PTZ-Position ungültig',
+  ptz_daemon_not_running: 'PTZ-Dienst läuft nicht',
+  ptz_fifo_open_failed: 'PTZ-Dienst nicht erreichbar',
+  bad_referer: 'Anfrage abgelehnt (Referer fehlt oder passt nicht)',
+  bad_origin: 'Anfrage abgelehnt (Origin passt nicht)',
+  bad_content_type: 'Anfrage abgelehnt (Content-Type)',
+};
+
+function errText(err) {
+  return `Fehler: ${ERR_TEXT[err] || err || 'Unbekannt'}`;
+}
+
+function showRideError(text) {
+  const statusBox = document.getElementById('ride-status');
+  statusBox.className = 'ride-status-box ride-status-err';
+  statusBox.textContent = text;
+}
+
+// --- Fahrt ausfuehren ---
 function executeTurn() {
   if (isBusy) return;
   if (currentDpan === 0 && currentDtilt === 0) {
@@ -815,34 +917,31 @@ function executeTurn() {
   const p = currentDpan;
   const t = currentDtilt;
   const statusBox = document.getElementById('ride-status');
+  lastClampedMessage = null;
 
-  // Vorab Busy anzeigen
   setBusyState(true, 3, 'Befehl wird gesendet...');
 
-  fetch(`/cgi-bin/api.cgi?action=turn&dpan=${p}&dtilt=${t}`, { method: 'POST', body: '' })
+  fetch(`/cgi-bin/api.cgi?action=turn&dpan=${p}&dtilt=${t}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: ''
+  })
     .then(r => r.json())
     .then(data => {
       if (data.ok) {
         const busySec = Math.max(1, Math.ceil((data.busy_ms || 1800) / 1000));
-        let msg = `Fahrt läuft... (noch ${busySec}s)`;
         if (data.clamped) {
-          msg = `Nur ${data.executed.dpan}°/${data.executed.dtilt}° möglich (Grenze) - noch ${busySec}s`;
-          statusBox.className = 'ride-status-box ride-status-clamped';
+          lastClampedMessage = `nur ${data.executed.dpan}°/${data.executed.dtilt}° möglich`;
         }
-        setBusyState(true, busySec, msg);
-        // Nach Ausführung springen Kreis und Slider auf 0
+        setBusyState(true, busySec);
         updateDialUI(0);
         updateTiltUI(0);
       } else {
         setBusyState(false);
         if (data.err === 'busy') {
           setBusyState(true, data.busy_remaining_s || 2, `Kamera ist beschäftigt (noch ${data.busy_remaining_s}s)`);
-        } else if (data.err === 'ptz_invalid') {
-          statusBox.className = 'ride-status-box ride-status-err';
-          statusBox.textContent = 'Fehler: PTZ-Position ungültig';
         } else {
-          statusBox.className = 'ride-status-box ride-status-err';
-          statusBox.textContent = `Fehler: ${data.err || 'Unbekannt'}`;
+          showRideError(errText(data.err));
         }
       }
     })
@@ -853,35 +952,55 @@ function executeTurn() {
     });
 }
 
-// --- Micro-PTZ (Pfeiltasten & Home) ---
+// --- Micro-PTZ ---
 function sendMicroPtz(act) {
   if (isBusy) return;
-  setBusyState(true, act === 'calibrate' ? 5 : 2);
-  fetch(`/cgi-bin/api.cgi?action=${act}`, { method: 'POST', body: '' })
+  lastClampedMessage = null;
+  setBusyState(true, 2);
+  fetch(`/cgi-bin/api.cgi?action=${act}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: ''
+  })
     .then(r => r.json())
     .then(data => {
-      if (!data.ok && data.err === 'busy') {
+      if (data.ok) return;
+      if (data.err === 'busy') {
         setBusyState(true, data.busy_remaining_s || 2);
+      } else {
+        setBusyState(false);
+        showRideError(errText(data.err));
       }
     })
     .catch(() => {
       setBusyState(false);
+      showRideError('Verbindungsfehler');
     });
 }
 
 // --- Beleuchtung ---
 function toggleLight() {
-  lightState = !lightState;
-  const act = lightState ? 'light_on' : 'light_off';
-  fetch(`/cgi-bin/api.cgi?action=${act}`, { method: 'POST', body: '' })
+  const targetState = !lightState;
+  const act = targetState ? 'light_on' : 'light_off';
+  fetch(`/cgi-bin/api.cgi?action=${act}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: ''
+  })
     .then(r => r.json())
     .then(data => {
-      document.getElementById('btn-light').classList.toggle('btn-primary', lightState);
-      showToast(lightState ? 'LED an' : 'LED aus');
-    });
+      if (data.ok) {
+        lightState = targetState;
+        document.getElementById('btn-light').classList.toggle('btn-primary', lightState);
+        showToast(lightState ? 'LED an' : 'LED aus');
+      } else {
+        showToast(`Fehler: ${data.err || 'unbekannt'}`);
+      }
+    })
+    .catch(() => showToast('Verbindungsfehler'));
 }
 
-// --- Zentraler Status-Poll (EIN einzelner Loop) ---
+// --- Zentraler Status-Poll ---
 function pollStatus() {
   if (document.hidden) return;
   if (pollTimeout) clearTimeout(pollTimeout);
@@ -896,7 +1015,12 @@ function pollStatus() {
       document.getElementById('stat-ptz').textContent = s.ptz_ready ? (s.busy ? 'Fahrt läuft' : 'Bereit') : 'Inaktiv';
       document.getElementById('stat-rtsp').textContent = s.rtsp_ready ? 'Aktiv (554)' : 'Inaktiv';
 
-      // Externe Busy-Aktualisierung
+      // LED-Zustand aus sysfs uebernehmen
+      if (typeof s.led_on !== 'undefined') {
+        lightState = s.led_on === 1;
+        document.getElementById('btn-light').classList.toggle('btn-primary', lightState);
+      }
+
       if (s.busy && !isBusy) {
         setBusyState(true, s.busy_remaining_s || 2);
       }
@@ -926,15 +1050,15 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-// Tastatursteuerung für Pfeiltasten
+// Tastatursteuerung (nur wenn opt-in aktiv)
 document.addEventListener('keydown', (e) => {
+  if (!keyboardControlEnabled) return;
   if (/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
   if (isBusy) return;
   if (e.key === 'ArrowUp') { e.preventDefault(); sendMicroPtz('up'); }
   else if (e.key === 'ArrowDown') { e.preventDefault(); sendMicroPtz('down'); }
   else if (e.key === 'ArrowLeft') { e.preventDefault(); sendMicroPtz('left'); }
   else if (e.key === 'ArrowRight') { e.preventDefault(); sendMicroPtz('right'); }
-  else if (e.key === ' ') { e.preventDefault(); sendMicroPtz('stop'); }
 });
 
 // Initialer Start

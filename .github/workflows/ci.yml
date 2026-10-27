@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, overhaul ]
+  pull_request:
+    branches: [ main, overhaul ]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dash shellcheck nodejs python3
+
+      - name: Shell Syntax Check (POSIX dash)
+        run: |
+          for f in *.sh bin/*.sh tools/*.sh webui/www/cgi-bin/*.cgi tests/*.sh; do
+            echo "Checking $f with dash -n..."
+            dash -n "$f"
+          done
+
+      - name: ShellCheck
+        run: |
+          # -S warning: nur Warnungen und Fehler brechen den Lauf ab (keine Stilhinweise)
+          # SC2034: Unused vars intentional for configs
+          # SC2086: Word splitting intentional for BusyBox params
+          # SC2154: Vars assigned by environment in CGI
+          shellcheck -s sh -S warning -e SC2034,SC2086,SC2154 \
+            bin/udhcpc_lanonly.sh \
+            start_webui.sh \
+            rtsp_supervisor.sh \
+            webui/www/cgi-bin/api.cgi \
+            tools/build_sd.sh \
+            tests/test_api.sh \
+            tests/test_start_webui.sh \
+            tests/test_supervisor.sh
+
+      - name: Python Syntax Check
+        run: |
+          python3 -m py_compile tools/cam_ctl.py
+
+      - name: JavaScript Syntax Check
+        run: |
+          python3 -c "
+          with open('webui/www/index.html') as f:
+              html = f.read()
+          import re
+          scripts = re.findall(r'<script>(.*?)</script>', html, re.DOTALL)
+          with open('/tmp/index_script.js', 'w') as out:
+              out.write(scripts[0])
+          "
+          node --check /tmp/index_script.js
+
+      - name: Run API Tests
+        run: |
+          chmod +x webui/www/cgi-bin/api.cgi tests/*.sh
+          dash tests/test_api.sh
+
+      - name: Run start_webui.sh Tests
+        run: dash tests/test_start_webui.sh
+
+      - name: Run RTSP Supervisor Tests
+        run: dash tests/test_supervisor.sh
